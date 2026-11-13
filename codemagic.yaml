@@ -1,10 +1,11 @@
 # Compila la app Android del conductor (APK) en Codemagic.
+# Compila la app Android del conductor (APK) en Codemagic.
 # Variables necesarias (Codemagic > App > Environment variables, grupo "supabase"):
 #   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
 workflows:
   conductor-apk:
-    name: Conductor APK
-    instance_type: linux_x2
+    name: Pasajeros.ar Conductor
+    instance_type: mac_mini_m2
     max_build_duration: 30
     environment:
       groups:
@@ -12,6 +13,10 @@ workflows:
       node: 20
       java: 17
     scripts:
+      - name: Verificar variables de Supabase
+        script: |
+          [ -n "$VITE_SUPABASE_URL" ] || { echo "FALTA VITE_SUPABASE_URL en el grupo supabase"; exit 1; }
+          [ -n "$VITE_SUPABASE_ANON_KEY" ] || { echo "FALTA VITE_SUPABASE_ANON_KEY en el grupo supabase"; exit 1; }
       - name: Instalar dependencias
         script: cd web && npm ci
       - name: Compilar la web (solo conductor) y sincronizar Android

@@ -4,6 +4,21 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Pasajeros.ar</title>
+    <script>
+      // Si la app falla al arrancar (pantalla en blanco), muestra el error en pantalla para poder diagnosticarlo.
+      (function () {
+        function show(msg) {
+          var r = document.getElementById('root');
+          if (r && r.childNodes.length === 0) {
+            r.innerHTML = '<pre style="white-space:pre-wrap;padding:16px;font:13px monospace;color:#b00020"></pre>';
+            r.firstChild.textContent = 'Error al iniciar la app:\n' + msg;
+          }
+        }
+        window.addEventListener('error', function (e) { show(e.message + (e.filename ? '\n' + e.filename + ':' + e.lineno : '')); });
+        window.addEventListener('unhandledrejection', function (e) { show(String(e.reason && e.reason.message || e.reason)); });
+        setTimeout(function () { show('La app no mostró nada en 6 segundos (sin error de JavaScript).'); }, 6000);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
