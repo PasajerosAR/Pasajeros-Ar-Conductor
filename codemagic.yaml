@@ -1,0 +1,22 @@
+# Compila la app Android del conductor (APK) en Codemagic.
+# Variables necesarias (Codemagic > App > Environment variables, grupo "supabase"):
+#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+workflows:
+  conductor-apk:
+    name: Conductor APK
+    instance_type: linux_x2
+    max_build_duration: 30
+    environment:
+      groups:
+        - supabase
+      node: 20
+      java: 17
+    scripts:
+      - name: Instalar dependencias
+        script: cd web && npm ci
+      - name: Compilar la web (solo conductor) y sincronizar Android
+        script: cd web && npm run apk:sync
+      - name: Generar el APK
+        script: cd web/android && chmod +x gradlew && ./gradlew assembleDebug
+    artifacts:
+      - web/android/app/build/outputs/**/*.apk

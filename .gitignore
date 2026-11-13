@@ -1,0 +1,12 @@
+node_modules
+dist
+.env.local
+.env
+*.tsbuildinfo
+.DS_Store
+
+# Android (Capacitor): lo generado al sincronizar no se sube
+web/android/app/src/main/assets/public
+web/android/app/src/main/assets/capacitor.config.json
+web/android/app/src/main/assets/capacitor.plugins.json
+web/android/capacitor-cordova-android-plugins

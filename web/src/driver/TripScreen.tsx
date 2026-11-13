@@ -1,0 +1,580 @@
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { errorCode, friendly } from '../lib/errors';
+import { must, useQuery } from '../lib/useQuery';
+import { Loading, formatTime } from '../ui';
+import { formatPunctuality, formatSigned, punctualityMinutes, punctualityState } from '../lib/punctuality';
+import { INCIDENT_LABEL, STATUS_LABEL, type CountResult, type IncidentKind, type RouteStop, type TripStatus } from '../lib/types';
+import { DAY_TYPE_LABEL, type DayType } from '../lib/dayType';
+import { nextScheduledStop, type TimedStop } from '../lib/tripProgress';
+import { liveProgress, type LiveStop } from '../lib/gpsProgress';
+import type { LatLng } from '../lib/routePath';
+import { useGps } from './useGps';
+import { RouteMap } from './RouteMap';
+import { nextTurn, prepare, type Maneuver, type Prepared, type TurnNotice } from '../lib/turnGuide';
+import { endTripConfirm } from './endTrip';
+import { loadCounts } from './counts';
+import { ScanPanel } from './ScanPanel';
+import { distanceM, nextDeparture, serviceScheduleReferenceTime } from '../lib/tripPlan';
+import { formatSpan } from '../lib/punctuality';
+import { DriverCompany } from './DriverCompany';
+
+interface TripDetail {
+  id: string; service_id: string; service_date: string; day_type: DayType | null; status: TripStatus; scheduled_departure: string; started_at: string | null; ended_at: string | null; layout_id: string | null;
+  services: { code: string } | null;
+  service_departures: { route_id: string; routes: { name: string; path: [number, number][] | null; maneuvers: Maneuver[] | null } | null } | null;
+  vehicles: { internal_number: string } | null;
+}
+
+const preparedRoutes = new WeakMap<Maneuver[], Prepared>();
+const prepareRoute = (path: [number, number][], maneuvers: Maneuver[]): Prepared => {
+  let prepared = preparedRoutes.get(maneuvers);
+  if (!prepared) {
+    prepared = prepare(path, maneuvers);
+    preparedRoutes.set(maneuvers, prepared);
+  }
+  return prepared;
+};
+
+export function TripScreen() {
+  const { id = '' } = useParams();
+  const navigate = useNavigate();
+  const [now, setNow] = useState(() => new Date());
+  const [error, setError] = useState<string | null>(null);
+  const [warn, setWarn] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [qty, setQty] = useState(1);
+  const [override, setOverride] = useState<{ stop: string; for: string } | null>(null); // parada elegida a mano; vale mientras la sugerida no cambie
+  const [scanning, setScanning] = useState(false);
+  const [tick, setTick] = useState(0);   // se suma al registrar para recargar los conteos por parada
+  const [showMap, setShowMap] = useState(false);
+  const [incOpen, setIncOpen] = useState(false);
+  const [incKind, setIncKind] = useState<IncidentKind>('traffic');
+  const [incNote, setIncNote] = useState('');
+  const [counts, setCounts] = useState<{ onboard: number; capacity: number } | null>(null);
+  const [countConfirmation, setCountConfirmation] = useState<{ kind: 'board' | 'alight'; quantity: number } | null>(null);
+  const [gpsSyncError, setGpsSyncError] = useState<string | null>(null);
+  const [autoAdvancing, setAutoAdvancing] = useState(false);
+  const lastGpsReport = useRef<{ tripId: string; requestedAt: number; recordedAt: number } | null>(null);
+  const arrivalCandidate = useRef<{ tripId: string; firstAt: number; firstPos: LatLng; lastFixAt: number; fixes: number } | null>(null);
+  const advanceAttempted = useRef<string | null>(null);
+
+  useEffect(() => { const t = setInterval(() => setNow(new Date()), 15_000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    setAutoAdvancing(false);
+    arrivalCandidate.current = null;
+    advanceAttempted.current = null;
+  }, [id]);
+
+  const trip = useQuery(async () => must(await supabase.from('trips')
+    .select('id,service_id,service_date,day_type,status,scheduled_departure,started_at,ended_at,layout_id,services(code),service_departures(route_id,routes(name,path,maneuvers)),vehicles(internal_number)')
+    .eq('id', id).maybeSingle()) as unknown as TripDetail | null, [id]);
+  const t = trip.data;
+  const routeId = trip.data?.service_departures?.route_id;
+  const stops = useQuery(async () => routeId
+    ? must(await supabase.from('route_stops').select('*').eq('route_id', routeId).order('position')) as RouteStop[]
+    : [], [routeId]);
+
+  const serviceId = trip.data?.service_id;
+  const times = useQuery(async () => serviceId
+    ? must(await supabase.from('service_stops').select('route_stop_id,minutes_from_start,dwell_minutes').eq('service_id', serviceId)) as
+      { route_stop_id: string; minutes_from_start: number; dwell_minutes: number }[]
+    : [], [serviceId]);
+
+  const stopCounts = useQuery(async () => must(await supabase.from('passenger_counts').select('stop_id,kind,quantity').eq('trip_id', id)) as
+    { stop_id: string | null; kind: 'board' | 'alight'; quantity: number }[], [id, tick]);
+
+  // Salidas y recorridos del servicio para preparar el siguiente viaje mientras este sigue en curso.
+  const done = t?.status === 'completed';
+  const canPrepareNext = done || t?.status === 'in_progress';
+  const nextDeps = useQuery(async () => canPrepareNext && trip.data ? must(await supabase.from('service_departures').select('id,route_id,departure_time,day_types')
+    .eq('service_id', trip.data.service_id).eq('active', true).order('departure_time')) as { id: string; route_id: string; departure_time: string; day_types: DayType[] }[] : [], [canPrepareNext, trip.data?.service_id]);
+  const routeNames = useQuery(async () => canPrepareNext ? must(await supabase.from('routes').select('id,name')) as { id: string; name: string }[] : [], [canPrepareNext]);
+  const nextOptions = t?.day_type
+    ? (nextDeps.data ?? []).filter((departure) => departure.day_types.includes(t.day_type as DayType))
+    : [];
+  const scheduleNow = t ? serviceScheduleReferenceTime(t.service_date, t.scheduled_departure, now) : now;
+  const automaticNext = nextOptions.length
+    ? nextDeparture(nextOptions, t?.service_departures?.route_id, scheduleNow)
+    : null;
+  const nextService = automaticNext;
+  const nextRouteName = (routeId: string) => routeNames.data?.find((route) => route.id === routeId)?.name ?? '';
+  const nextOrigin = useQuery(async () => nextService && !nextService.tomorrow
+    ? must(await supabase.from('route_stops').select('name').eq('route_id', nextService.dep.route_id).eq('position', 1).maybeSingle()) as { name: string } | null
+    : null, [nextService?.dep.route_id, nextService?.tomorrow]);
+
+  // pasajes del viaje (con parada de subida y bajada): de acá sale lo previsto en cada parada
+  const tickets = useQuery(async () => must(await supabase.from('tickets').select('boarding_stop_id,alighting_stop_id,status').eq('trip_id', id)) as
+    { boarding_stop_id: string; alighting_stop_id: string; status: 'valid' | 'boarded' | 'cancelled' }[], [id, tick]);
+
+  const gps = useGps(t?.status === 'in_progress');
+  useEffect(() => {
+    if (!t || t.status !== 'in_progress' || !t.day_type || nextDeps.loading
+      || !gps.pos || gps.error || gps.accuracyM === null || gps.timestamp === null
+      || gps.accuracyM > 50 || Date.now() - gps.timestamp > 15_000 || gps.timestamp - Date.now() > 5_000) {
+      arrivalCandidate.current = null;
+      return;
+    }
+
+    const upcoming = nextService;
+    const destination = stops.data?.filter((stop) => stop.lat !== null && stop.lng !== null).at(-1);
+    if (!upcoming || upcoming.tomorrow || !destination || destination.lat === null || destination.lng === null) {
+      arrivalCandidate.current = null;
+      return;
+    }
+
+    const destinationDistance = distanceM(gps.pos, [destination.lat, destination.lng]);
+    if (destinationDistance > Math.max(50, gps.accuracyM * 1.5)) {
+      arrivalCandidate.current = null;
+      return;
+    }
+
+    const previous = arrivalCandidate.current;
+    if (!previous || previous.tripId !== t.id || gps.timestamp <= previous.lastFixAt
+      || distanceM(previous.firstPos, gps.pos) > 40) {
+      arrivalCandidate.current = { tripId: t.id, firstAt: gps.timestamp, firstPos: gps.pos, lastFixAt: gps.timestamp, fixes: 1 };
+      return;
+    }
+
+    previous.lastFixAt = gps.timestamp;
+    previous.fixes += 1;
+    if (previous.fixes < 2 || gps.timestamp - previous.firstAt < 15_000 || advanceAttempted.current === t.id) return;
+
+    advanceAttempted.current = t.id;
+    setAutoAdvancing(true);
+    void Promise.resolve(supabase.rpc('advance_service_trip', {
+      p_trip: t.id,
+      p_next_departure: upcoming.dep.id,
+      p_force: false
+    }))
+      .then(({ data, error: advanceError }) => {
+        setAutoAdvancing(false);
+        if (advanceError) {
+          setError(friendly(advanceError));
+          return;
+        }
+        navigate(`/conductor/viaje/${(data as { id: string }).id}`, { replace: true });
+      })
+      .catch((advanceError: unknown) => {
+        setAutoAdvancing(false);
+        setError(friendly(advanceError));
+      });
+  }, [t?.id, t?.status, t?.day_type, t?.service_departures?.route_id, t?.service_date,
+    nextDeps.data, nextDeps.loading, stops.data, gps.pos, gps.accuracyM, gps.timestamp, gps.error,
+    nextService?.dep.id, nextService?.tomorrow, now, navigate]);
+  useEffect(() => {
+    if (!t || t.status !== 'in_progress' || !gps.pos || gps.accuracyM === null || gps.timestamp === null || gps.error) return;
+    const nowMs = Date.now();
+    if (gps.accuracyM > 100 || nowMs - gps.timestamp > 90_000 || gps.timestamp - nowMs > 30_000) return;
+    const previous = lastGpsReport.current;
+    if (previous?.tripId === t.id && (nowMs - previous.requestedAt < 15_000 || gps.timestamp <= previous.recordedAt)) return;
+    lastGpsReport.current = { tripId: t.id, requestedAt: nowMs, recordedAt: gps.timestamp };
+    void Promise.resolve(supabase.rpc('update_trip_live_position', {
+      p_trip: t.id,
+      p_latitude: gps.pos[0],
+      p_longitude: gps.pos[1],
+      p_accuracy_m: gps.accuracyM,
+      p_heading: gps.heading,
+      p_recorded_at: new Date(gps.timestamp).toISOString()
+    })).then(({ error: syncError }) => {
+      setGpsSyncError(syncError ? friendly(syncError) : null);
+    }).catch((syncError: unknown) => setGpsSyncError(friendly(syncError)));
+  }, [t?.id, t?.status, gps.pos, gps.accuracyM, gps.heading, gps.timestamp, gps.error]);
+  const layoutId = t?.layout_id;
+  const refreshCounts = async () => { if (t) setCounts(await loadCounts(t.id, layoutId)); };
+  useEffect(() => { void refreshCounts(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [t?.id, t?.status, layoutId]);
+
+  const act = async (fn: () => PromiseLike<{ error: { message: string } | null }>) => {
+    setBusy(true); setError(null); setWarn(null);
+    const { error: e } = await fn();
+    setBusy(false);
+    if (e) { setError(friendly(e)); return false; }
+    return true;
+  };
+
+  const start = async () => { if (await act(() => supabase.rpc('start_trip', { p_trip: id }))) trip.reload(); };
+
+  const sendIncident = async () => {
+    if (await act(() => supabase.rpc('report_incident', { p_trip: id, p_kind: incKind, p_note: incNote.trim() || null }))) {
+      setIncOpen(false); setIncNote(''); setWarn('Incidencia informada.');
+    }
+  };
+
+  const register = async (kind: 'board' | 'alight', quantity: number) => {
+    setBusy(true); setError(null); setWarn(null);
+    const event = crypto.randomUUID();           // se reutiliza en el reintento: el servidor no lo cuenta dos veces
+    const call = () => supabase.rpc('register_count', { p_trip: id, p_kind: kind, p_quantity: quantity, p_stop: stopId || null, p_event: event });
+    let res = await call();
+    if (res.error && errorCode(res.error) === null) res = await call();   // fallo de red: un reintento
+    setBusy(false);
+    if (res.error) { setError(friendly(res.error)); return; }
+    const r = res.data as CountResult;
+    setCounts({ onboard: r.onboard, capacity: r.capacity });
+    setTick((n) => n + 1);
+    if (r.over_capacity) setWarn(`Atención: hay ${r.onboard} a bordo y la capacidad es ${r.capacity}.`);
+    setQty(1);
+    setCountConfirmation(null);
+  };
+
+  if (trip.loading) return <div className="driver-app"><DriverCompany /><Loading /></div>;
+  if (!t) return <div className="driver-app"><DriverCompany /><div className="notice error">No se encontró el viaje.</div><Link to="/conductor"><button style={{ width: '100%' }}>Volver</button></Link></div>;
+
+  const scheduledAt = new Date(t.scheduled_departure);
+  const beforeDeparture = now.getTime() < scheduledAt.getTime();
+  const inTrip = t.status === 'in_progress';
+  const nextWhen = (departure: NonNullable<typeof nextService>) => {
+    const hhmm = departure.dep.departure_time.slice(0, 5);
+    return departure.tomorrow ? `Mañana a las ${hhmm}` : departure.minutes > 0 ? `En ${formatSpan(departure.minutes)} (${hhmm})` : `Ya es hora (${hhmm})`;
+  };
+  const nextScheduleAt = (departure: NonNullable<typeof nextService>) => {
+    const [hour, minute] = departure.dep.departure_time.split(':').map(Number);
+    const [year, month, day] = t.service_date.split('-').map(Number);
+    const scheduled = new Date(year, month - 1, day, hour, minute);
+    if (departure.tomorrow) scheduled.setDate(scheduled.getDate() + 1);
+    return scheduled;
+  };
+  const forceNextTrip = async () => {
+    if (!nextService || nextService.tomorrow || busy || autoAdvancing) return;
+    setBusy(true);
+    setError(null);
+    advanceAttempted.current = t.id;
+    try {
+      if (counts?.onboard) {
+        window.alert(`Aviso: figuran ${counts.onboard} pasajero${counts.onboard === 1 ? '' : 's'} a bordo. El viaje cambiará igual y el próximo comienza con el conteo en cero.`);
+      }
+      const { data, error: advanceError } = await supabase.rpc('advance_service_trip', {
+        p_trip: t.id,
+        p_next_departure: nextService.dep.id,
+        p_force: true
+      });
+      if (advanceError) {
+        advanceAttempted.current = null;
+        setError(friendly(advanceError));
+        return;
+      }
+      navigate(`/conductor/viaje/${(data as { id: string }).id}`, { replace: true });
+    } catch (advanceError: unknown) {
+      advanceAttempted.current = null;
+      setError(friendly(advanceError));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const finish = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (nextService && !nextService.tomorrow) {
+        if (!window.confirm(`¿Finalizar este viaje y comenzar automáticamente ${nextRouteName(nextService.dep.route_id)} (${nextService.dep.departure_time.slice(0, 5)})?`)) return;
+        const { data, error: advanceError } = await supabase.rpc('advance_service_trip', {
+          p_trip: id,
+          p_next_departure: nextService.dep.id,
+          p_force: false
+        });
+        if (!advanceError) {
+          navigate(`/conductor/viaje/${(data as { id: string }).id}`, { replace: true });
+          return;
+        }
+        if (errorCode(advanceError) === 'ONBOARD_REMAINING') {
+          if (!window.confirm(`${friendly(advanceError)}. ¿Finalizar este viaje sin iniciar automáticamente el siguiente?`)) return;
+          const forcedEnd = await supabase.rpc('end_trip', { p_trip: id, p_force: true });
+          if (forcedEnd.error) setError(friendly(forcedEnd.error)); else trip.reload();
+          return;
+        }
+        if (!window.confirm(`No se pudo iniciar automáticamente el siguiente viaje: ${friendly(advanceError)}. ¿Finalizar solo el viaje actual?`)) {
+          setError(friendly(advanceError));
+          return;
+        }
+        let end = await supabase.rpc('end_trip', { p_trip: id, p_force: false });
+        if (errorCode(end.error) === 'ONBOARD_REMAINING'
+          && window.confirm(`${friendly(end.error)}. ¿Finalizar el viaje sin iniciar el siguiente?`)) {
+          end = await supabase.rpc('end_trip', { p_trip: id, p_force: true });
+        }
+        if (end.error) setError(friendly(end.error)); else trip.reload();
+        return;
+      }
+      const e = await endTripConfirm(id);
+      if (e) setError(e); else trip.reload();
+    } catch (finishError: unknown) {
+      setError(friendly(finishError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Horarios a cumplir: los de la carga del servicio (salida programada + minutos de cada parada).
+  const timed: TimedStop[] = (stops.data ?? []).flatMap((s) => {
+    const x = times.data?.find((y) => y.route_stop_id === s.id);
+    return x ? [{ id: s.id, name: s.name, position: s.position, minutes_from_start: x.minutes_from_start, dwell_minutes: x.dwell_minutes }] : [];
+  });
+  const liveStops: LiveStop[] = (stops.data ?? []).flatMap((s) => {
+    const x = times.data?.find((y) => y.route_stop_id === s.id);
+    return x && s.lat !== null && s.lng !== null
+      ? [{ id: s.id, name: s.name, lat: s.lat, lng: s.lng, minutes_from_start: x.minutes_from_start, dwell_minutes: x.dwell_minutes }] : [];
+  });
+  const savedPath = t.service_departures?.routes?.path;
+  const savedManeuvers = t.service_departures?.routes?.maneuvers;
+  const gpsFixAt = gps.timestamp === null ? null : Date.now() - gps.timestamp;
+  const turnPosition = gps.pos && !gps.error && gps.accuracyM !== null && gps.accuracyM <= 100
+    && gpsFixAt !== null && gpsFixAt <= 90_000 && gpsFixAt >= -30_000
+    ? gps.pos
+    : null;
+  const turn: TurnNotice | null = inTrip && !beforeDeparture && turnPosition && savedPath && savedPath.length > 1 && savedManeuvers?.length
+    ? nextTurn(prepareRoute(savedPath, savedManeuvers), turnPosition).notice
+    : null;
+  const line: LatLng[] | null = savedPath && savedPath.length > 1 ? savedPath : liveStops.length > 1 ? liveStops.map((s) => [s.lat, s.lng] as LatLng) : null;
+
+  // En ruta, el adelanto o atraso lo marca solo el GPS. La hora en que el chofer se conectó no cuenta.
+  const live = inTrip && !beforeDeparture && gps.pos && line && liveStops.length > 1
+    ? liveProgress(line, liveStops, scheduledAt, now, gps.pos) : null;
+  const mins: number | null = inTrip && !beforeDeparture ? (live?.mins ?? null) : punctualityMinutes(scheduledAt, now);
+  const state = mins === null ? null : punctualityState(mins);
+  const dataReady = !stops.loading && !times.loading;
+  const gpsMessage = !dataReady ? 'Cargando...'
+    : !line || liveStops.length < 2 ? 'Faltan paradas con ubicación y horario'
+    : gps.error === 'denied' ? 'Activá el permiso de ubicación'
+    : live?.offRoute ? 'Fuera del recorrido'
+    : gps.pos ? '' : gps.error ? 'Sin señal GPS' : 'Buscando señal GPS...';
+
+  // Próxima parada: con GPS manda la posición; sin GPS (o antes de salir) el reloj. Siempre con horario programado.
+  let next: { id: string; name: string; scheduled: Date } | null = null;
+  let arrived = false;
+  if (inTrip && timed.length > 1) {
+    const clock = nextScheduledStop(timed, scheduledAt, now);
+    // Hasta la hora de salida se muestra la parada 1 (terminal o punto de encuentro), donde empieza el recorrido.
+    const first = [...timed].sort((x, y) => x.position - y.position)[0];
+    if (beforeDeparture && first) next = { id: first.id, name: first.name, scheduled: scheduledAt };
+    else if (live && !live.offRoute) {
+      if (live.nextIndex === null) arrived = true;
+      else {
+        const ls = liveStops[live.nextIndex];
+        const tm = timed.find((x) => x.id === ls.id);
+        if (tm) next = { id: tm.id, name: tm.name, scheduled: new Date(scheduledAt.getTime() + tm.minutes_from_start * 60000) };
+      }
+    }
+    if (!arrived && !next && clock) next = { id: clock.stop.id, name: clock.stop.name, scheduled: clock.scheduled };
+  }
+
+  // Parada actual: la del lugar donde está el vehículo; en marcha, la próxima. El chofer puede corregirla a mano.
+  const here = live && !live.offRoute && live.atIndex !== null ? liveStops[live.atIndex]?.id : undefined;
+  const suggested = here ?? next?.id ?? stops.data?.[0]?.id ?? '';
+  const stopId = override && override.for === suggested ? override.stop : suggested;
+  const gpsFix = gps.pos && gps.accuracyM !== null && gps.timestamp !== null && !gps.error
+    ? { latitude: gps.pos[0], longitude: gps.pos[1], accuracyM: gps.accuracyM, timestamp: gps.timestamp }
+    : null;
+  const rowsHere = (stopCounts.data ?? []).filter((c) => c.stop_id === stopId);
+  const live_tk = (tickets.data ?? []).filter((k) => k.status !== 'cancelled');
+  const expUp = (sid: string) => live_tk.filter((k) => k.boarding_stop_id === sid).length;
+  const expDown = (sid: string) => live_tk.filter((k) => k.alighting_stop_id === sid).length;
+  const toBoard = (sid: string) => live_tk.filter((k) => k.status === 'valid' && k.boarding_stop_id === sid).length;
+  const upHere = rowsHere.filter((c) => c.kind === 'board').reduce((n, c) => n + c.quantity, 0);
+  const downHere = rowsHere.filter((c) => c.kind === 'alight').reduce((n, c) => n + c.quantity, 0);
+  const hm = (d: Date) => formatTime(d.toISOString());
+  const panelSchedule = arrived
+    ? nextService && !nextService.tomorrow ? nextScheduleAt(nextService) : null
+    : next?.scheduled ?? null;
+  const free = counts ? Math.max(counts.capacity - counts.onboard, 0) : 0;
+  const sold = tickets.data?.filter((ticket) => ticket.status !== 'cancelled').length ?? null;
+
+  if (scanning && inTrip) {
+    return <ScanPanel tripId={id} layoutId={layoutId ?? null} stopId={suggested} stopName={stops.data?.find((s) => s.id === suggested)?.name ?? ''} gpsFix={gpsFix}
+      onBack={() => setScanning(false)} onCounted={() => { setTick((n) => n + 1); void refreshCounts(); }} />;
+  }
+
+  return (
+    <div className="driver-app">
+      <DriverCompany />
+      <div className="row" style={{ alignItems: 'center' }}>
+        <Link to="/conductor"><button style={{ minHeight: 48 }} aria-label="Volver a mis servicios">Volver</button></Link>
+        <div style={{ flex: '1 1 160px' }}>
+          <h1 style={{ fontSize: 18 }}>Servicio {t.services?.code} - {t.service_departures?.routes?.name}</h1>
+          <span className="muted">Unidad {t.vehicles?.internal_number ?? 'sin asignar'} - {STATUS_LABEL[t.status]}{t.day_type ? ` - ${DAY_TYPE_LABEL[t.day_type]}` : ''}</span>
+        </div>
+      </div>
+
+      {error && <div className="notice error" role="alert">{error}</div>}
+      {warn && <div className="notice warn" role="status">{warn}</div>}
+      {tickets.error && <div className="notice error" role="alert">{tickets.error}</div>}
+
+      {(t.status === 'scheduled' || inTrip) && (
+        <div className="panel" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          <div>
+            <div className="muted">{inTrip && !beforeDeparture ? 'Puntualidad' : 'Para la salida'}</div>
+            <div className={`num ${state === 'late' ? 'late' : state === 'early' ? 'early' : ''}`}>{mins === null ? '-' : formatSigned(mins)}</div>
+            <div>{mins === null ? gpsMessage : formatPunctuality(mins, beforeDeparture)}</div>
+            {inTrip && gpsSyncError && <div className="notice error" role="alert">No se pudo sincronizar la ubicación: {gpsSyncError}</div>}
+          </div>
+          <div className="muted" style={{ textAlign: 'right', lineHeight: 1.7 }}>
+            Programada <b className="driver-strong">{formatTime(t.scheduled_departure)}</b>
+            {t.started_at && <><br />Se conectó <b className="driver-strong">{formatTime(t.started_at)}</b></>}
+          </div>
+        </div>
+      )}
+
+      {inTrip && (
+        <div className="panel driver-trip-stop-panel">
+          <div className="driver-trip-stop-main">
+            {arrived && nextService && !nextService.tomorrow ? (
+              <>
+                <div className="muted">Tiempo del próximo viaje · salida desde (parada 1)</div>
+                <div className="driver-trip-stop-name">{nextOrigin.data?.name ?? nextRouteName(nextService.dep.route_id)}</div>
+              </>
+            ) : arrived ? (
+              <>
+                <div className="muted">Llegaste al destino</div>
+                <div>Finalizá {nextService?.tomorrow ? 'el último viaje de hoy' : 'este viaje'}.</div>
+              </>
+            ) : next ? (
+              <>
+                <div className="muted">{beforeDeparture ? 'Salida desde (parada 1)' : 'Próxima parada'}</div>
+                <div className="driver-trip-stop-name">{next.name}</div>
+                {(tickets.data?.length ?? 0) > 0 && (
+                  <div className="driver-passenger-flow" style={{ marginTop: 6 }} aria-label="Previsto en la próxima parada">
+                    <span className="driver-up-count">▲ {toBoard(next.id)}<span className="muted" style={{ fontSize: 13, fontWeight: 500 }}> suben</span></span>
+                    <span className="driver-down-count">▼ {expDown(next.id)}<span className="muted" style={{ fontSize: 13, fontWeight: 500 }}> bajan</span></span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="muted">Viaje en curso</div>
+            )}
+          </div>
+          <button type="button" className="direction-switch driver-trip-direction-switch"
+            onClick={() => void forceNextTrip()}
+            disabled={busy || autoAdvancing || nextDeps.loading || !nextService || nextService.tomorrow}
+            aria-label="Forzar el próximo viaje"
+            title="Forzar el próximo viaje">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4" /></svg>
+          </button>
+          {panelSchedule && (
+            <div className="driver-trip-stop-time">
+              <span className="muted">Prog.</span>
+              <b>{hm(panelSchedule)}</b>
+            </div>
+          )}
+        </div>
+      )}
+      {inTrip && autoAdvancing && <div className="notice" role="status">Llegada confirmada. Iniciando el próximo viaje...</div>}
+
+      {t.status === 'scheduled' && (
+        <button className="primary big" disabled={busy || !t.vehicles} onClick={start}>Iniciar viaje</button>
+      )}
+      {t.status === 'scheduled' && !t.vehicles && <div className="notice warn">Todavía no tiene vehículo asignado. Avisale al administrador.</div>}
+
+      {t.status === 'in_progress' && (
+        <>
+          <div className="grid4 driver-stats">
+            <div className="panel"><b>{sold ?? '-'}</b><span className="muted">Vendidos</span></div>
+            <div className="panel"><b>{counts?.onboard ?? '-'}</b><span className="muted">A bordo</span></div>
+            <div className="panel"><b>{counts && counts.capacity > 0 ? free : '-'}</b><span className="muted">Libres</span></div>
+            <div className="panel"><b>{counts?.capacity || '-'}</b><span className="muted">Capacidad</span></div>
+          </div>
+
+          {(nextDeps.error || routeNames.error || nextOrigin.error) && <div className="notice error" role="alert">{nextDeps.error ?? routeNames.error ?? nextOrigin.error}</div>}
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span className="muted">Parada para conteo manual</span>
+            <select value={stopId} onChange={(e) => setOverride({ stop: e.target.value, for: suggested })}>
+              {(stops.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.position}. {s.name}</option>)}
+            </select>
+            <span className="muted">El escáner valida por GPS la parada real; esta selección solo afecta los conteos manuales.</span>
+          </label>
+
+          <div className="driver-passenger-flow" aria-label="Registrados en esta parada">
+            <span className="driver-up-count">▲ {upHere}{expUp(stopId) > 0 && ` de ${expUp(stopId)}`}<span className="muted" style={{ fontSize: 13, fontWeight: 500 }}> subieron</span></span>
+            <span className="driver-down-count">▼ {downHere}{expDown(stopId) > 0 && ` de ${expDown(stopId)}`}<span className="muted" style={{ fontSize: 13, fontWeight: 500 }}> bajaron</span></span>
+          </div>
+
+          {override && override.for === suggested && (
+            <button type="button" onClick={() => setOverride(null)}>Volver a la parada automática</button>
+          )}
+          <details>
+            <summary>&nbsp;&nbsp;&nbsp;Resumen por parada <span className="muted"></span></summary>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 20 }}>
+              {(stops.data ?? []).map((s) => {
+                const rows = (stopCounts.data ?? []).filter((c) => c.stop_id === s.id);
+                const up = rows.filter((c) => c.kind === 'board').reduce((n, c) => n + c.quantity, 0);
+                const down = rows.filter((c) => c.kind === 'alight').reduce((n, c) => n + c.quantity, 0);
+                return (
+                  <button key={s.id} type="button" className={`driver-stop-summary-row${s.id === stopId ? ' primary' : ''}`}
+                    onClick={() => setOverride({ stop: s.id, for: suggested })}>
+                    <span className="driver-stop-summary-name">{s.position}. {s.name}</span>
+                    <span className="driver-stop-summary-counts">
+                      <span className="driver-up-count">▲ {up}{expUp(s.id) > 0 && `/${expUp(s.id)}`}</span>
+                      <span className="driver-down-count">▼ {down}{expDown(s.id) > 0 && `/${expDown(s.id)}`}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </details>
+
+          <div className="passenger-controls" aria-label="Registrar pasajeros">
+            <button className="primary" disabled={busy || !!countConfirmation} onClick={() => setCountConfirmation({ kind: 'alight', quantity: qty })}>Bajan</button>
+            <button aria-label="Restar un pasajero" disabled={busy || !!countConfirmation || qty <= 1} onClick={() => setQty(qty - 1)}>-</button>
+            <div className="passenger-quantity" aria-live="polite">{qty}</div>
+            <button aria-label="Sumar un pasajero" disabled={busy || !!countConfirmation} onClick={() => setQty(qty + 1)}>+</button>
+            <button disabled={busy || !!countConfirmation} onClick={() => setCountConfirmation({ kind: 'board', quantity: qty })}>Suben</button>
+          </div>
+
+          {countConfirmation && (
+            <div className="panel count-confirmation" role="group" aria-label="Confirmar registro de pasajeros">
+              <strong id="count-confirmation-title" aria-live="polite">
+                Confirmar {countConfirmation.kind === 'alight' ? 'descenso' : 'ascenso'} de {countConfirmation.quantity} pasajero{countConfirmation.quantity === 1 ? '' : 's'}
+              </strong>
+              <div className="row">
+                <button className="primary" disabled={busy} onClick={() => register(countConfirmation.kind, countConfirmation.quantity)}>Sí</button>
+                <button className="secondary" disabled={busy} onClick={() => setCountConfirmation(null)}>No</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button style={{ flex: 1 }} aria-pressed={showMap} onClick={() => setShowMap(!showMap)}>{showMap ? 'Ocultar mapa' : 'Mapa'}</button>
+            <button style={{ flex: 1 }} aria-pressed={incOpen} onClick={() => setIncOpen(!incOpen)}>Incidencia</button>
+            <button style={{ flex: 1 }} onClick={() => setScanning(true)}>Escanear</button>
+          </div>
+
+          {showMap && <RouteMap stops={stops.data ?? []} path={savedPath ?? null} highlightId={next?.id ?? null} pos={gps.pos} heading={gps.heading} turn={turn} />}
+
+          {incOpen && (
+            <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="seg" role="group" aria-label="Tipo de incidencia">
+                {(Object.keys(INCIDENT_LABEL) as IncidentKind[]).map((k) => (
+                  <button key={k} type="button" className={k === incKind ? 'primary' : ''} aria-pressed={k === incKind} onClick={() => setIncKind(k)}>{INCIDENT_LABEL[k]}</button>
+                ))}
+              </div>
+              <input value={incNote} onChange={(e) => setIncNote(e.target.value)} placeholder={incKind === 'other' ? 'Detalle (obligatorio)' : 'Detalle (opcional)'} aria-label="Detalle de la incidencia" />
+              <button className="primary" disabled={busy || (incKind === 'other' && incNote.trim().length < 3)} onClick={sendIncident}>Informar</button>
+            </div>
+          )}
+
+        </>
+      )}
+
+      {t.status === 'in_progress' && (
+        <div className="driver-sticky-finish">
+          <button className="stop" style={{ width: '100%' }} disabled={busy || autoAdvancing} onClick={finish}>Finalizar viaje</button>
+        </div>
+      )}
+
+      {t.status === 'completed' && (
+        <>
+          <div className="panel">Viaje finalizado a las {t.ended_at ? formatTime(t.ended_at) : '-'}.</div>
+          {(nextDeps.error || routeNames.error) && <div className="notice error" role="alert">{nextDeps.error ?? routeNames.error}</div>}
+          {nextService && (
+              <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="muted">Siguiente viaje del servicio {t.services?.code}</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{nextRouteName(nextService.dep.route_id)}</div>
+                <div>{nextWhen(nextService)}</div>
+                <Link to={`/conductor/iniciar?servicio=${encodeURIComponent(t.services?.code ?? '')}&tipo=${t.day_type}&sentido=${nextService.dep.route_id}&salida=${nextService.dep.id}&fecha=${t.service_date}&autoSentido=1&forzadoSentido=0`}>
+                  <button className="primary big" style={{ width: '100%' }}>Iniciar siguiente viaje</button>
+                </Link>
+              </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
