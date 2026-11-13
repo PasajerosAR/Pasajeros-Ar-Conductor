@@ -12,6 +12,10 @@ workflows:
       node: 20
       java: 17
     scripts:
+      - name: Verificar variables de Supabase
+        script: |
+          [ -n "$VITE_SUPABASE_URL" ] || { echo "FALTA VITE_SUPABASE_URL en el grupo supabase"; exit 1; }
+          [ -n "$VITE_SUPABASE_ANON_KEY" ] || { echo "FALTA VITE_SUPABASE_ANON_KEY en el grupo supabase"; exit 1; }
       - name: Instalar dependencias
         script: cd web && npm ci
       - name: Compilar la web (solo conductor) y sincronizar Android
