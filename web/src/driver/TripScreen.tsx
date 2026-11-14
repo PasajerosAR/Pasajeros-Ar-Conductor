@@ -356,7 +356,7 @@ export function TripScreen() {
   const dataReady = !stops.loading && !times.loading;
   const gpsMessage = !dataReady ? 'Cargando...'
     : !line || liveStops.length < 2 ? 'Faltan paradas con ubicación y horario'
-    : gps.error === 'denied' ? 'Activá el permiso de ubicación'
+    : gps.error === 'denied' ? 'Activá permiso de ubicación'
     : live?.offRoute ? 'Fuera del recorrido'
     : gps.pos ? '' : gps.error ? 'Sin señal GPS' : 'Buscando señal GPS...';
 
