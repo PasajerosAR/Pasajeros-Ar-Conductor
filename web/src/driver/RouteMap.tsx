@@ -250,8 +250,7 @@ export function RouteMap({
               <div><strong>{speedKmh === null ? '--' : Math.round(speedKmh)}</strong><span>km/h</span></div>
             </div>
             <div className={`route-map-punctuality${punctualityState ? ` ${punctualityState}` : ''}`}>
-              <span className="route-map-status-dot" />
-              <span>{punctualityMinutes === null ? punctualityText : `${formatSigned(punctualityMinutes)} min`}</span>
+              <span>{punctualityMinutes === null ? punctualityText : `${formatSigned(punctualityMinutes)} `}</span>
             </div>
           </div>
         </>

@@ -417,7 +417,7 @@ export function TripScreen() {
         <TripClock />
         <div className="driver-trip-heading">
           <h1 style={{ fontSize: 18 }}>Servicio {t.services?.code} - {t.service_departures?.routes?.name}</h1>
-          <span className="muted">Unidad {t.vehicles?.internal_number ?? 'sin asignar'} - {STATUS_LABEL[t.status]}{t.day_type ? ` - ${DAY_TYPE_LABEL[t.day_type]}` : ''}</span>
+          <span className="muted muted01">Unidad {t.vehicles?.internal_number ?? 'sin asignar'} - {STATUS_LABEL[t.status]}{t.day_type ? ` - ${DAY_TYPE_LABEL[t.day_type]}` : ''}</span>
         </div>
       </div>
 
@@ -428,12 +428,12 @@ export function TripScreen() {
       {(t.status === 'scheduled' || inTrip) && (
         <div className="panel" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
           <div>
-            <div className="muted">{inTrip && !beforeDeparture ? 'Puntualidad' : 'Para la salida'}</div>
+            <div className="muted muted02">{inTrip && !beforeDeparture ? 'Puntualidad' : 'Para la salida'}</div>
             <div className={`num ${state === 'late' ? 'late' : state === 'early' ? 'early' : ''}`}>{mins === null ? '-' : formatSigned(mins)}</div>
             <div>{mins === null ? gpsMessage : formatPunctuality(mins, beforeDeparture)}</div>
             {inTrip && gpsSyncError && <div className="notice error" role="alert">No se pudo sincronizar la ubicación: {gpsSyncError}</div>}
           </div>
-          <div className="muted" style={{ textAlign: 'right', lineHeight: 1.7 }}>
+          <div className="muted muted03" style={{ textAlign: 'right', lineHeight: 1.7 }}>
             Programada <b className="driver-strong">{formatTime(t.scheduled_departure)}</b>
             {t.started_at && <><br />Se conectó <b className="driver-strong">{formatTime(t.started_at)}</b></>}
           </div>
@@ -445,27 +445,27 @@ export function TripScreen() {
           <div className="driver-trip-stop-main">
             {arrived && nextService && !nextService.tomorrow ? (
               <>
-                <div className="muted">Tiempo del próximo viaje · salida desde (parada 1)</div>
+                <div className="muted muted04">Tiempo del próximo viaje · salida desde (parada 1)</div>
                 <div className="driver-trip-stop-name">{nextOrigin.data?.name ?? nextRouteName(nextService.dep.route_id)}</div>
               </>
             ) : arrived ? (
               <>
-                <div className="muted">Llegaste al destino</div>
+                <div className="muted muted05">Llegaste al destino</div>
                 <div>Finalizá {nextService?.tomorrow ? 'el último viaje de hoy' : 'este viaje'}.</div>
               </>
             ) : next ? (
               <>
-                <div className="muted">{beforeDeparture ? 'Salida desde (parada 1)' : 'Próxima parada'}</div>
+                <div className="muted muted06">{beforeDeparture ? 'Salida desde (parada 1)' : 'Próxima parada'}</div>
                 <div className="driver-trip-stop-name">{next.name}</div>
                 {(tickets.data?.length ?? 0) > 0 && (
                   <div className="driver-passenger-flow" style={{ marginTop: 6 }} aria-label="Previsto en la próxima parada">
-                    <span className="driver-up-count">▲ {toBoard(next.id)}<span className="muted" style={{ fontSize: 13, fontWeight: 500 }}> suben</span></span>
-                    <span className="driver-down-count">▼ {expDown(next.id)}<span className="muted" style={{ fontSize: 13, fontWeight: 500 }}> bajan</span></span>
+                    <span className="driver-up-count">▲ {toBoard(next.id)}<span className="muted muted07"></span></span>
+                    <span className="driver-down-count">▼ {expDown(next.id)}<span className="muted muted08"></span></span>
                   </div>
                 )}
               </>
             ) : (
-              <div className="muted">Viaje en curso</div>
+              <div className="muted muted09">Viaje en curso</div>
             )}
           </div>
           <button type="button" className="direction-switch driver-trip-direction-switch"
@@ -477,7 +477,7 @@ export function TripScreen() {
           </button>
           {panelSchedule && (
             <div className="driver-trip-stop-time">
-              <span className="muted">Prog.</span>
+              <span className="muted muted10">Prog.</span>
               <b>{hm(panelSchedule)}</b>
             </div>
           )}
@@ -493,32 +493,32 @@ export function TripScreen() {
       {t.status === 'in_progress' && (
         <>
           <div className="grid4 driver-stats">
-            <div className="panel"><b>{sold ?? '-'}</b><span className="muted">Vendidos</span></div>
-            <div className="panel"><b>{counts?.onboard ?? '-'}</b><span className="muted">A bordo</span></div>
-            <div className="panel"><b>{counts && counts.capacity > 0 ? free : '-'}</b><span className="muted">Libres</span></div>
-            <div className="panel"><b>{counts?.capacity || '-'}</b><span className="muted">Capacidad</span></div>
+            <div className="panel"><b>{sold ?? '-'}</b><span className="muted muted11">Vendidos</span></div>
+            <div className="panel"><b>{counts?.onboard ?? '-'}</b><span className="muted muted12">A bordo</span></div>
+            <div className="panel"><b>{counts && counts.capacity > 0 ? free : '-'}</b><span className="muted muted13">Libres</span></div>
+            <div className="panel"><b>{counts?.capacity || '-'}</b><span className="muted muted14">Capacidad</span></div>
           </div>
 
           {(nextDeps.error || routeNames.error || nextOrigin.error) && <div className="notice error" role="alert">{nextDeps.error ?? routeNames.error ?? nextOrigin.error}</div>}
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span className="muted">Parada para conteo manual</span>
+            <span className="muted muted15">Parada para conteo manual</span>
             <select value={stopId} onChange={(e) => setOverride({ stop: e.target.value, for: suggested })}>
               {(stops.data ?? []).map((s) => <option key={s.id} value={s.id}>{s.position}. {s.name}</option>)}
             </select>
-            <span className="muted">El escáner valida por GPS la parada real; esta selección solo afecta los conteos manuales.</span>
+            <span className="muted muted16">El escáner valida por GPS la parada real; esta selección solo afecta los conteos manuales.</span>
           </label>
 
           <div className="driver-passenger-flow" aria-label="Registrados en esta parada">
-            <span className="driver-up-count">▲ {upHere}{expUp(stopId) > 0 && ` de ${expUp(stopId)}`}<span className="muted" style={{ fontSize: 13, fontWeight: 500 }}> subieron</span></span>
-            <span className="driver-down-count">▼ {downHere}{expDown(stopId) > 0 && ` de ${expDown(stopId)}`}<span className="muted" style={{ fontSize: 13, fontWeight: 500 }}> bajaron</span></span>
+            <span className="driver-up-count">▲ {upHere}{expUp(stopId) > 0 && ` de ${expUp(stopId)}`}<span className="muted muted17"> subieron</span></span>
+            <span className="driver-down-count">▼ {downHere}{expDown(stopId) > 0 && ` de ${expDown(stopId)}`}<span className="muted muted18"> bajaron</span></span>
           </div>
 
           {override && override.for === suggested && (
             <button type="button" onClick={() => setOverride(null)}>Volver a la parada automática</button>
           )}
           <details>
-            <summary>&nbsp;&nbsp;&nbsp;Resumen por parada <span className="muted"></span></summary>
+            <summary>&nbsp;&nbsp;&nbsp;Resumen por parada <span className="muted muted19"></span></summary>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 20 }}>
               {(stops.data ?? []).map((s) => {
                 const rows = (stopCounts.data ?? []).filter((c) => c.stop_id === s.id);
@@ -634,7 +634,7 @@ export function TripScreen() {
           {(nextDeps.error || routeNames.error) && <div className="notice error" role="alert">{nextDeps.error ?? routeNames.error}</div>}
           {nextService && (
               <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div className="muted">Siguiente viaje del servicio {t.services?.code}</div>
+                <div className="muted muted20">Siguiente viaje del servicio {t.services?.code}</div>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>{nextRouteName(nextService.dep.route_id)}</div>
                 <div>{nextWhen(nextService)}</div>
                 <Link to={`/conductor/iniciar?servicio=${encodeURIComponent(t.services?.code ?? '')}&tipo=${t.day_type}&sentido=${nextService.dep.route_id}&salida=${nextService.dep.id}&fecha=${t.service_date}&autoSentido=1&forzadoSentido=0`}>
