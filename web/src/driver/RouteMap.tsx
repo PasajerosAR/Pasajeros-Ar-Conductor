@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import '@tomickigrzegorz/leaflet-rotate';
 import { turnAngle, turnText, type TurnNotice } from '../lib/turnGuide';
 import { distanceM } from '../lib/tripPlan';
+import { formatSigned } from '../lib/punctuality';
 
 interface Props {
   stops: { id: string; name: string; lat: number | null; lng: number | null }[];
@@ -14,6 +15,7 @@ interface Props {
   heading?: number | null;        // rumbo en grados
   speedKmh?: number | null;
   punctualityText?: string;
+  punctualityMinutes?: number | null;
   punctualityState?: 'early' | 'on_time' | 'late' | null;
   turn?: TurnNotice | null;
 }
@@ -28,7 +30,7 @@ const arrowHtml = () =>
 // Mapa de solo lectura: recorrido por calles, paradas con pin rojo (la próxima, más grande y oscura) y la flecha de la unidad. Por defecto sigue a la unidad con zoom cercano.
 export function RouteMap({
   stops, path, highlightId, height = 320, pos = null, heading = null, speedKmh = null,
-  punctualityText = 'Buscando señal GPS', punctualityState = null,
+  punctualityText = 'Buscando señal GPS', punctualityMinutes = null, punctualityState = null,
   turn = null
 }: Props) {
   const el = useRef<HTMLDivElement>(null);
@@ -239,10 +241,6 @@ export function RouteMap({
     <div className={`route-map-view${fullscreen ? ' fullscreen' : ''}`}>
       {fullscreen && (
         <>
-          <button type="button" className="route-map-back route-map-fullscreen-back" aria-label="Volver al viaje" title="Volver al viaje"
-            onClick={() => setFullscreen(false)}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h12" /></svg>
-          </button>
           <div className="route-map-navigation-status" role="group" aria-label="Velocidad y puntualidad GPS">
             <div className="route-map-speed">
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -253,7 +251,7 @@ export function RouteMap({
             </div>
             <div className={`route-map-punctuality${punctualityState ? ` ${punctualityState}` : ''}`}>
               <span className="route-map-status-dot" />
-              <span>{punctualityText}</span>
+              <span>{punctualityMinutes === null ? punctualityText : `${formatSigned(punctualityMinutes)} min`}</span>
             </div>
           </div>
         </>
@@ -271,14 +269,20 @@ export function RouteMap({
         </div>
       )}
       <div className="route-map-controls">
-        {!fullscreen && (
-          <button type="button" className="route-map-icon-button" aria-label="Usar mapa en pantalla completa" title="Usar mapa en pantalla completa"
-            onClick={() => setFullscreen(true)}>
+        <button type="button" className="route-map-icon-button"
+            aria-label={fullscreen ? 'Minimizar mapa' : 'Usar mapa en pantalla completa'}
+            title={fullscreen ? 'Minimizar mapa' : 'Usar mapa en pantalla completa'}
+            onClick={() => setFullscreen(!fullscreen)}>
+          {fullscreen ? (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 3v6H3m12-6v6h6M3 15h6v6m12-6h-6v6" />
+            </svg>
+          ) : (
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3" />
             </svg>
-          </button>
-        )}
+          )}
+        </button>
         <button type="button" className={`route-map-icon-button${pos && follow && rotationFollow ? ' is-active' : ''}`}
             disabled={!pos || !follow}
             aria-pressed={Boolean(pos && follow && rotationFollow)}

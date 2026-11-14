@@ -602,6 +602,7 @@ export function TripScreen() {
             heading={gps.heading}
             speedKmh={gpsFixAt !== null && gpsFixAt >= -30_000 && gpsFixAt <= 10_000 ? gps.speedKmh : null}
             punctualityText={mins === null ? gpsMessage : formatPunctuality(mins, beforeDeparture)}
+            punctualityMinutes={mins}
             punctualityState={state}
             turn={turn}
           />}
