@@ -37,6 +37,29 @@ const prepareRoute = (path: [number, number][], maneuvers: Maneuver[]): Prepared
   return prepared;
 };
 
+function TripClock() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const time = new Intl.DateTimeFormat('es-AR', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  }).format(now);
+  const date = new Intl.DateTimeFormat('es-AR', {
+    day: '2-digit', month: '2-digit'
+  }).format(now);
+
+  return (
+    <time className="driver-trip-clock" dateTime={now.toISOString()} aria-label={`Hora ${time}, fecha ${date}`}>
+      <strong>{time}</strong>
+      <span>{date}</span>
+    </time>
+  );
+}
+
 export function TripScreen() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -385,9 +408,14 @@ export function TripScreen() {
   return (
     <div className="driver-app">
       <DriverCompany />
-      <div className="row" style={{ alignItems: 'center' }}>
-        <Link to="/conductor"><button style={{ minHeight: 48 }} aria-label="Volver a mis servicios">Volver</button></Link>
-        <div style={{ flex: '1 1 160px' }}>
+      <div className="row driver-trip-heading-row">
+        <Link to="/conductor" aria-label="Volver a mis servicios" title="Volver a mis servicios">
+          <button type="button" className="scan-back-button" aria-label="Volver a mis servicios">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h12" /></svg>
+          </button>
+        </Link>
+        <TripClock />
+        <div className="driver-trip-heading">
           <h1 style={{ fontSize: 18 }}>Servicio {t.services?.code} - {t.service_departures?.routes?.name}</h1>
           <span className="muted">Unidad {t.vehicles?.internal_number ?? 'sin asignar'} - {STATUS_LABEL[t.status]}{t.day_type ? ` - ${DAY_TYPE_LABEL[t.day_type]}` : ''}</span>
         </div>
@@ -511,11 +539,23 @@ export function TripScreen() {
           </details>
 
           <div className="passenger-controls" aria-label="Registrar pasajeros">
-            <button className="primary" disabled={busy || !!countConfirmation} onClick={() => setCountConfirmation({ kind: 'alight', quantity: qty })}>Bajan</button>
-            <button aria-label="Restar un pasajero" disabled={busy || !!countConfirmation || qty <= 1} onClick={() => setQty(qty - 1)}>-</button>
+            <button type="button" className="count-action-button count-alight" aria-label="Registrar descenso de pasajeros"
+              title="Bajan" disabled={busy || !!countConfirmation} onClick={() => setCountConfirmation({ kind: 'alight', quantity: qty })}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v15m-6-6 6 6 6-6" /></svg>
+            </button>
+            <button type="button" className="count-step-button" aria-label="Restar un pasajero" title="Restar uno"
+              disabled={busy || !!countConfirmation || qty <= 1} onClick={() => setQty(qty - 1)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
+            </button>
             <div className="passenger-quantity" aria-live="polite">{qty}</div>
-            <button aria-label="Sumar un pasajero" disabled={busy || !!countConfirmation} onClick={() => setQty(qty + 1)}>+</button>
-            <button disabled={busy || !!countConfirmation} onClick={() => setCountConfirmation({ kind: 'board', quantity: qty })}>Suben</button>
+            <button type="button" className="count-step-button" aria-label="Sumar un pasajero" title="Sumar uno"
+              disabled={busy || !!countConfirmation} onClick={() => setQty(qty + 1)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-7-7h14" /></svg>
+            </button>
+            <button type="button" className="count-action-button count-board" aria-label="Registrar ascenso de pasajeros"
+              title="Suben" disabled={busy || !!countConfirmation} onClick={() => setCountConfirmation({ kind: 'board', quantity: qty })}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5m-6 6 6-6 6 6" /></svg>
+            </button>
           </div>
 
           {countConfirmation && (
@@ -530,13 +570,41 @@ export function TripScreen() {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button style={{ flex: 1 }} aria-pressed={showMap} onClick={() => setShowMap(!showMap)}>{showMap ? 'Ocultar mapa' : 'Mapa'}</button>
-            <button style={{ flex: 1 }} aria-pressed={incOpen} onClick={() => setIncOpen(!incOpen)}>Incidencia</button>
-            <button style={{ flex: 1 }} onClick={() => setScanning(true)}>Escanear</button>
+          <div className="trip-tool-actions" role="group" aria-label="Herramientas del viaje">
+            <button type="button" className={`trip-tool-button map-tool${showMap ? ' is-active' : ''}`}
+              aria-label={showMap ? 'Ocultar mapa' : 'Mostrar mapa'} title={showMap ? 'Ocultar mapa' : 'Mostrar mapa'}
+              aria-pressed={showMap} onClick={() => setShowMap(!showMap)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15m6-12v15" />
+              </svg>
+            </button>
+            <button type="button" className={`trip-tool-button incident-tool${incOpen ? ' is-active' : ''}`}
+              aria-label={incOpen ? 'Cerrar incidencia' : 'Informar incidencia'} title={incOpen ? 'Cerrar incidencia' : 'Informar incidencia'}
+              aria-pressed={incOpen} onClick={() => setIncOpen(!incOpen)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3 2.8 19h18.4L12 3Z" />
+                <path d="M12 9v4m0 3h.01" />
+              </svg>
+            </button>
+            <button type="button" className="trip-tool-button scan-tool"
+              aria-label="Escanear pasaje" title="Escanear pasaje" onClick={() => setScanning(true)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 8V5a1 1 0 0 1 1-1h3m8 0h3a1 1 0 0 1 1 1v3m0 8v3a1 1 0 0 1-1 1h-3m-8 0H5a1 1 0 0 1-1-1v-3M4 12h16" />
+              </svg>
+            </button>
           </div>
 
-          {showMap && <RouteMap stops={stops.data ?? []} path={savedPath ?? null} highlightId={next?.id ?? null} pos={gps.pos} heading={gps.heading} turn={turn} />}
+          {showMap && <RouteMap
+            stops={stops.data ?? []}
+            path={savedPath ?? null}
+            highlightId={next?.id ?? null}
+            pos={gps.pos}
+            heading={gps.heading}
+            speedKmh={gpsFixAt !== null && gpsFixAt >= -30_000 && gpsFixAt <= 10_000 ? gps.speedKmh : null}
+            punctualityText={mins === null ? gpsMessage : formatPunctuality(mins, beforeDeparture)}
+            punctualityState={state}
+            turn={turn}
+          />}
 
           {incOpen && (
             <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

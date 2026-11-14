@@ -313,7 +313,12 @@ export function ScanPanel({ tripId: id, layoutId, stopId, stopName, gpsFix, onBa
     <div className="driver-app">
       <DriverCompany />
       <div className="row" style={{ alignItems: 'center', flexWrap: 'nowrap' }}>
-        <button style={{ minHeight: 48 }} onClick={onBack}>Volver</button>
+        <button type="button" className="scan-back-button"
+          aria-label={showPrefs ? 'Volver al escáner' : 'Volver al viaje'}
+          title={showPrefs ? 'Volver al escáner' : 'Volver al viaje'}
+          onClick={() => showPrefs ? setShowPrefs(false) : onBack()}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h12" /></svg>
+        </button>
         <h1 style={{ fontSize: 18, flex: 1 }}>Lector de pasajes<div className="muted" style={{ fontSize: 13, fontWeight: 400 }}>Parada sugerida: {stopName || '-'}</div></h1>
         <button aria-label="Configuración del escáner" aria-expanded={showPrefs} style={{ minHeight: 48 }} onClick={() => setShowPrefs(!showPrefs)}>⚙</button>
       </div>

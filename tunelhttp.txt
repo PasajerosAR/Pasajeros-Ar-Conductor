@@ -1,0 +1,2 @@
+Terminal 1, dentro de web: npm run dev
+Terminal 2: cloudflared tunnel --url http://localhost:5173
