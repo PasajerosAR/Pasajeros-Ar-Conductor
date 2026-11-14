@@ -1689,18 +1689,18 @@ tr.sel-row {
   gap: 4px;
 }
 .route-map-speed strong {
-  font-size: 22px;
+  font-size: 26px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 .route-map-speed span {
   color: #ffffffbf;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 700;
 }
 .route-map-punctuality {
   max-width: min(48vw, 170px);
-  font-size: 16px;
+  font-size: 10px;
   font-weight: 750;
 }
 .route-map-punctuality > span:last-child {
@@ -1926,7 +1926,7 @@ tr.sel-row {
     font-size: 16px;
   }
   .route-map-punctuality {
-    font-size: 9px;
+    font-size: 16px;
   }
   .route-map-view.fullscreen .turn-banner {
     top: calc(max(12px, env(safe-area-inset-top)) + 128px);
