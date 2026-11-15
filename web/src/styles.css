@@ -2050,3 +2050,132 @@ tr.sel-row {
 }
 
 
+
+/* ============================================================
+   BARRA DE ESTADO DEL TELÉFONO (arriba, fija)
+   ============================================================ */
+
+.device-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1500;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 8px;
+  padding: max(4px, env(safe-area-inset-top)) 8px 4px;
+  background: var(--driver-panel-bg);
+  border-bottom: 1px solid var(--driver-panel-border);
+  color: var(--driver-text);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+  .device-bar .status-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+    .device-bar .status-item.off {
+      opacity: .45;
+    }
+    .device-bar .status-item.data .status-text::before {
+      content: "● ";
+      color: var(--driver-up);
+    }
+  .device-bar .status-text {
+    color: var(--driver-muted);
+    max-width: 54px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .device-bar .net-type {
+    font-weight: 800;
+  }
+  .device-bar .gps .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--driver-late);
+  }
+    .device-bar .gps.ok .dot {
+      background: var(--driver-up);
+    }
+    .device-bar .gps.off .dot {
+      background: var(--driver-down);
+    }
+  .device-bar .signal-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 1.5px;
+    height: 15px;
+  }
+    .device-bar .signal-bars i {
+      width: 3px;
+      border-radius: 1px;
+      background: var(--driver-muted);
+      opacity: .35;
+    }
+      .device-bar .signal-bars i.on {
+        background: var(--driver-text);
+        opacity: 1;
+      }
+  .device-bar .battery-body {
+    position: relative;
+    width: 28px;
+    height: 12px;
+    border: 1.5px solid var(--driver-muted);
+    border-radius: 3px;
+    padding: 1px;
+  }
+    .device-bar .battery-body::after {
+      content: "";
+      position: absolute;
+      right: -4px;
+      top: 3px;
+      width: 2px;
+      height: 4px;
+      border-radius: 0 1px 1px 0;
+      background: var(--driver-muted);
+    }
+    .device-bar .battery-body i {
+      display: block;
+      height: 100%;
+      border-radius: 1px;
+      background: var(--driver-up);
+    }
+  .device-bar .battery.mid .battery-body i {
+    background: var(--driver-late);
+  }
+  .device-bar .battery.low .battery-body i {
+    background: var(--driver-down);
+  }
+
+  /* con la cámara frontal en el medio: dos mitades y un hueco para la cámara */
+  .device-bar.split {
+    flex-wrap: nowrap;
+    gap: 0;
+    height: var(--bar-h);
+    padding: 0;
+    overflow: hidden;
+  }
+    .device-bar.split .bar-left {
+      flex: 0 0 var(--cut-left);
+      width: var(--cut-left);
+      display: flex;
+      align-items: center;
+      justify-content: space-evenly;
+      min-width: 0;
+    }
+    .device-bar.split .bar-gap {
+      flex: 0 0 var(--cut-gap);
+    }
+    .device-bar.split .bar-right {
+      flex: 1 1 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-evenly;
+      min-width: 0;
+    }

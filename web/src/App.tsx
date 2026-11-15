@@ -20,6 +20,7 @@ import { TripScreen } from './driver/TripScreen';
 import { TestQrs } from './driver/TestQrs';
 import { DriverThemeProvider } from './driver/DriverTheme';
 import { GpsGuard } from './driver/GpsGuard';
+import { DeviceStatusBar } from './driver/DeviceStatusBar';
 
 const DRIVER_ONLY = import.meta.env.MODE === 'driver';
 
@@ -74,6 +75,7 @@ export function App() {
   if (profile.role === 'driver') {
     const routes = (
       <DriverThemeProvider>
+        {DRIVER_ONLY && <DeviceStatusBar />}
         <Routes>
           <Route path="/conductor" element={<DriverHome />} />
           <Route path="/conductor/iniciar" element={<StartService />} />
