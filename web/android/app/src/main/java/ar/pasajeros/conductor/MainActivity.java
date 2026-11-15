@@ -15,6 +15,10 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         // Pantalla siempre encendida mientras la app está abierta (el GPS del WebView solo funciona con pantalla encendida).
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // La app dibuja detrás de las barras del sistema: al ocultarlas, el contenido ocupa toda la pantalla (sin franja vacía arriba).
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
         // El contenido llega hasta el borde superior, también detrás de la cámara frontal; la barra de estado esquiva esa zona.
         if (Build.VERSION.SDK_INT >= 28) {
             WindowManager.LayoutParams lp = getWindow().getAttributes();
