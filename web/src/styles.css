@@ -197,7 +197,7 @@ label {
     min-width: 0;
   }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .live-trip-card {
     grid-template-columns: 1fr;
     gap: 6px;
@@ -216,7 +216,7 @@ label {
 .muted {
   color: var(--muted);
   font-size: 10px;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 /* pill */
@@ -637,9 +637,9 @@ td {
 .driver-app .muted {
   color: var(--driver-muted);
 }
-.driver-app .muted01 { font-size: 10px; }
+.driver-app .muted01 { font-size: 12px; }
 .driver-app .muted02 { font-size: 12px; }
-.driver-app .muted03 { font-size: 16px; }
+.driver-app .muted03 { font-size: 18px; }
 .driver-app .muted04 { font-size: 10px; }
 .driver-app .muted05 { font-size: 10px; }
 .driver-app .muted06 { font-size: 12px; }
@@ -1903,7 +1903,7 @@ tr.sel-row {
 
 @media (max-width: 360px) {
   .driver-app .grid4.driver-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .driver-app .driver-trip-stop-panel {
     grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
@@ -1971,6 +1971,37 @@ tr.sel-row {
   .driver-status-badge {
     padding: 5px 7px;
   }
+
+  /* driver-app */
+.driver-app .muted {
+  color: var(--driver-muted);
+}
+.driver-app .muted01 { font-size: 12px; }
+.driver-app .muted02 { font-size: 12px; }
+.driver-app .muted03 { font-size: 18px; }
+.driver-app .muted04 { font-size: 12px; }
+.driver-app .muted05 { font-size: 10px; }
+.driver-app .muted06 { font-size: 10px; }
+.driver-app .muted07 { font-size: 13px; font-weight: 500; }
+.driver-app .muted08 { font-size: 13px; font-weight: 500; }
+.driver-app .muted09 { font-size: 10px; }
+.driver-app .muted10 { font-size: 12px; }
+.driver-app .muted11 { font-size: 10px; }
+.driver-app .muted12 { font-size: 10px; }
+.driver-app .muted13 { font-size: 10px; }
+.driver-app .muted14 { font-size: 10px; }
+.driver-app .muted15 { font-size: 10px; }
+.driver-app .muted16 { font-size: 10px; }
+.driver-app .muted17 { font-size: 13px; font-weight: 500; }
+.driver-app .muted18 { font-size: 13px; font-weight: 500; }
+.driver-app .muted19 { font-size: 10px; }
+.driver-app .muted20 { font-size: 10px; }
+.driver-app h1 {
+  color: var(--driver-text);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: -.3px;
+}
 }
 
 /* ============================================================

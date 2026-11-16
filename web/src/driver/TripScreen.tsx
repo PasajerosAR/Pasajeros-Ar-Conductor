@@ -433,10 +433,11 @@ export function TripScreen() {
             <div>{mins === null ? gpsMessage : formatPunctuality(mins, beforeDeparture)}</div>
             {inTrip && gpsSyncError && <div className="notice error" role="alert">No se pudo sincronizar la ubicación: {gpsSyncError}</div>}
           </div>
-          <div className="muted muted03" style={{ textAlign: 'right', lineHeight: 1.7 }}>
-            Programada <b className="driver-strong">{formatTime(t.scheduled_departure)}</b>
-            {t.started_at && <><br />Se conectó <b className="driver-strong">{formatTime(t.started_at)}</b></>}
-          </div>
+         <div className="muted muted03" style={{ textAlign: 'right', lineHeight: 1.7 }}>
+  <span style={{ fontSize: '12px' }}>Inicio</span>{' '}
+  <b className="driver-strong">{formatTime(t.scheduled_departure)}</b>
+  {/* {t.started_at && <><br /><b className="driver-strong">{formatTime(t.started_at)}</b></>} */}
+</div>
         </div>
       )}
 
