@@ -7,6 +7,7 @@ interface AuthState {
   loading: boolean;
   session: Session | null;
   profile: Profile | null;
+  blockedFeatures: string[];   // funciones que el administrador general le bloqueó a la empresa del usuario
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 }
@@ -17,6 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [blockedFeatures, setBlockedFeatures] = useState<string[]>([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); if (!data.session) setLoading(false); });
@@ -33,13 +35,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { alive = false; };
   }, [session]);
 
+  useEffect(() => {
+    if (!profile?.company_id) { setBlockedFeatures([]); return; }
+    let alive = true;
+    supabase.from('companies').select('blocked_features').eq('id', profile.company_id).maybeSingle().then(({ data }) => {
+      if (alive) setBlockedFeatures((data as { blocked_features: string[] } | null)?.blocked_features ?? []);
+    });
+    return () => { alive = false; };
+  }, [profile?.company_id]);
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return error ? 'Correo o contraseña incorrectos.' : null;
   };
   const signOut = async () => { await supabase.auth.signOut(); };
 
-  return <Ctx.Provider value={{ loading, session, profile, signIn, signOut }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ loading, session, profile, blockedFeatures, signIn, signOut }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth(): AuthState {

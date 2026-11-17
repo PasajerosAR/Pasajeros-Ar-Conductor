@@ -16,6 +16,7 @@ import { nextTurn, prepare, type Maneuver, type Prepared, type TurnNotice } from
 import { endTripConfirm } from './endTrip';
 import { loadCounts } from './counts';
 import { ScanPanel } from './ScanPanel';
+import { useAuth } from '../auth/AuthProvider';
 import { distanceM, nextDeparture, serviceScheduleReferenceTime } from '../lib/tripPlan';
 import { formatSpan } from '../lib/punctuality';
 import { DriverCompany } from './DriverCompany';
@@ -63,6 +64,8 @@ function TripClock() {
 export function TripScreen() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const { blockedFeatures } = useAuth();   // funciones que el administrador general le bloqueó a la empresa
+  const blocked = (feature: string) => blockedFeatures.includes(feature);
   const [now, setNow] = useState(() => new Date());
   const [error, setError] = useState<string | null>(null);
   const [warn, setWarn] = useState<string | null>(null);
@@ -187,6 +190,7 @@ export function TripScreen() {
     nextDeps.data, nextDeps.loading, stops.data, gps.pos, gps.accuracyM, gps.timestamp, gps.error,
     nextService?.dep.id, nextService?.tomorrow, now, navigate]);
   useEffect(() => {
+    if (blockedFeatures.includes('gps')) return;   // la empresa no tiene seguimiento GPS: no se envía la posición
     if (!t || t.status !== 'in_progress' || !gps.pos || gps.accuracyM === null || gps.timestamp === null || gps.error) return;
     const nowMs = Date.now();
     if (gps.accuracyM > 100 || nowMs - gps.timestamp > 90_000 || gps.timestamp - nowMs > 30_000) return;
@@ -203,7 +207,7 @@ export function TripScreen() {
     })).then(({ error: syncError }) => {
       setGpsSyncError(syncError ? friendly(syncError) : null);
     }).catch((syncError: unknown) => setGpsSyncError(friendly(syncError)));
-  }, [t?.id, t?.status, gps.pos, gps.accuracyM, gps.heading, gps.timestamp, gps.error]);
+  }, [t?.id, t?.status, gps.pos, gps.accuracyM, gps.heading, gps.timestamp, gps.error, blockedFeatures]);
   const layoutId = t?.layout_id;
   const refreshCounts = async () => { if (t) setCounts(await loadCounts(t.id, layoutId)); };
   useEffect(() => { void refreshCounts(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [t?.id, t?.status, layoutId]);
@@ -539,6 +543,8 @@ export function TripScreen() {
             </div>
           </details>
 
+          {!blocked('counter') && (
+            <>
           <div className="passenger-controls" aria-label="Registrar pasajeros">
             <button type="button" className="count-action-button count-alight" aria-label="Registrar descenso de pasajeros"
               title="Bajan" disabled={busy || !!countConfirmation} onClick={() => setCountConfirmation({ kind: 'alight', quantity: qty })}>
@@ -570,6 +576,8 @@ export function TripScreen() {
               </div>
             </div>
           )}
+            </>
+          )}
 
           <div className="trip-tool-actions" role="group" aria-label="Herramientas del viaje">
             <button type="button" className={`trip-tool-button map-tool${showMap ? ' is-active' : ''}`}
@@ -579,6 +587,7 @@ export function TripScreen() {
                 <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15m6-12v15" />
               </svg>
             </button>
+            {!blocked('incidents') && (
             <button type="button" className={`trip-tool-button incident-tool${incOpen ? ' is-active' : ''}`}
               aria-label={incOpen ? 'Cerrar incidencia' : 'Informar incidencia'} title={incOpen ? 'Cerrar incidencia' : 'Informar incidencia'}
               aria-pressed={incOpen} onClick={() => setIncOpen(!incOpen)}>
@@ -587,12 +596,15 @@ export function TripScreen() {
                 <path d="M12 9v4m0 3h.01" />
               </svg>
             </button>
+            )}
+            {!blocked('scanner') && (
             <button type="button" className="trip-tool-button scan-tool"
               aria-label="Escanear pasaje" title="Escanear pasaje" onClick={() => setScanning(true)}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 8V5a1 1 0 0 1 1-1h3m8 0h3a1 1 0 0 1 1 1v3m0 8v3a1 1 0 0 1-1 1h-3m-8 0H5a1 1 0 0 1-1-1v-3M4 12h16" />
               </svg>
             </button>
+            )}
           </div>
 
           {showMap && <RouteMap
@@ -608,7 +620,7 @@ export function TripScreen() {
             turn={turn}
           />}
 
-          {incOpen && (
+          {incOpen && !blocked('incidents') && (
             <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div className="seg" role="group" aria-label="Tipo de incidencia">
                 {(Object.keys(INCIDENT_LABEL) as IncidentKind[]).map((k) => (
