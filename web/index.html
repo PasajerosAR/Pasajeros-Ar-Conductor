@@ -3,6 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      // Fondo del tema elegido desde el primer momento (evita el destello blanco al abrir).
+      try { document.documentElement.style.background = localStorage.getItem('transporte.driverTheme') === 'light' ? '#f4f6f8' : '#0e1621'; } catch (e) {}
+    </script>
     <title>Pasajeros.ar</title>
     <script>
       // Si la app falla al arrancar (pantalla en blanco), muestra el error en pantalla para poder diagnosticarlo.

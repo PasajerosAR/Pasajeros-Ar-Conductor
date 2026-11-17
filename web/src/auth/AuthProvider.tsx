@@ -18,11 +18,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileUid, setProfileUid] = useState<string | null>(null);   // usuario cuyo perfil ya se consultó
   const [blockedFeatures, setBlockedFeatures] = useState<string[]>([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); if (!data.session) setLoading(false); });
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => { setSession(s); if (!s) { setProfile(null); setLoading(false); } });
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => { setSession(s); if (!s) { setProfile(null); setProfileUid(null); setLoading(false); } });
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session) return;
     let alive = true;
     supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle().then(({ data }) => {
-      if (alive) { setProfile((data as Profile | null) ?? null); setLoading(false); }
+      if (alive) { setProfile((data as Profile | null) ?? null); setProfileUid(session.user.id); setLoading(false); }
     });
     return () => { alive = false; };
   }, [session]);
@@ -50,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   const signOut = async () => { await supabase.auth.signOut(); };
 
-  return <Ctx.Provider value={{ loading, session, profile, blockedFeatures, signIn, signOut }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ loading: loading || (!!session && profileUid !== session.user.id), session, profile, blockedFeatures, signIn, signOut }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth(): AuthState {

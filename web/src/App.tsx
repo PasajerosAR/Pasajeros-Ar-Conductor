@@ -2,7 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from './auth/AuthProvider';
 import { Login } from './auth/Login';
 import { configured } from './lib/supabase';
-import { Loading, Notice } from './ui';
+import { Notice, SplashLoading } from './ui';
 import { AdminLayout } from './admin/AdminLayout';
 import { TripsPage } from './admin/TripsPage';
 import { VehiclesPage } from './admin/VehiclesPage';
@@ -36,7 +36,7 @@ export function App() {
       </div>
     );
   }
-  if (loading) return <div className="center"><Loading /></div>;
+  if (loading) return <SplashLoading />;
   if (!session) {
     const audience = !DRIVER_ONLY && (pathname === '/admin' || pathname.startsWith('/admin/')) ? 'admin' : 'driver';
     return <DriverThemeProvider><Login audience={audience} /></DriverThemeProvider>;

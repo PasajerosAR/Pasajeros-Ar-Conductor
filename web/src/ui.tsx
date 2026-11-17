@@ -4,6 +4,18 @@ export function Notice({ kind = 'error', children }: { kind?: 'error' | 'warn' |
   return <div className={`notice ${kind}`} role={kind === 'error' ? 'alert' : 'status'}>{children}</div>;
 }
 
+// Pantalla de carga completa (al abrir la app o iniciar sesión). Usa el tema elegido por el conductor.
+export function SplashLoading() {
+  let theme = 'dark';
+  try { theme = window.localStorage.getItem('transporte.driverTheme') === 'light' ? 'light' : 'dark'; } catch { /* sin almacenamiento: tema oscuro */ }
+  return (
+    <div className="splash" data-theme={theme} role="status" aria-live="polite">
+      <span className="splash-spinner" aria-hidden="true" />
+      <span>Cargando</span>
+    </div>
+  );
+}
+
 export function Loading() {
   return <p className="muted">Cargando...</p>;
 }
