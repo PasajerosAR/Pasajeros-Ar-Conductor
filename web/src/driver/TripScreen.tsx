@@ -16,6 +16,7 @@ import { nextTurn, prepare, type Maneuver, type Prepared, type TurnNotice } from
 import { endTripConfirm } from './endTrip';
 import { loadCounts } from './counts';
 import { ScanPanel } from './ScanPanel';
+import { TaquillaPanel } from './TaquillaPanel';
 import { useAuth } from '../auth/AuthProvider';
 import { distanceM, nextDeparture, serviceScheduleReferenceTime } from '../lib/tripPlan';
 import { formatSpan } from '../lib/punctuality';
@@ -73,6 +74,7 @@ export function TripScreen() {
   const [qty, setQty] = useState(1);
   const [override, setOverride] = useState<{ stop: string; for: string } | null>(null); // parada elegida a mano; vale mientras la sugerida no cambie
   const [scanning, setScanning] = useState(false);
+  const [taquilla, setTaquilla] = useState(false);
   const [tick, setTick] = useState(0);   // se suma al registrar para recargar los conteos por parada
   const [showMap, setShowMap] = useState(false);
   const [incOpen, setIncOpen] = useState(false);
@@ -404,6 +406,10 @@ export function TripScreen() {
   const free = counts ? Math.max(counts.capacity - counts.onboard, 0) : 0;
   const sold = tickets.data?.filter((ticket) => ticket.status !== 'cancelled').length ?? null;
 
+  if (taquilla && routeId) {
+    return <TaquillaPanel tripId={id} layoutId={layoutId ?? null} routeId={routeId} stops={stops.data ?? []} suggestedStopId={suggested}
+      onboard={counts?.onboard ?? null} capacity={counts?.capacity ?? null} onSold={tickets.reload} onBack={() => setTaquilla(false)} />;
+  }
   if (scanning && inTrip) {
     return <ScanPanel tripId={id} layoutId={layoutId ?? null} stopId={suggested} stopName={stops.data?.find((s) => s.id === suggested)?.name ?? ''} gpsFix={gpsFix}
       onBack={() => setScanning(false)} onCounted={() => { setTick((n) => n + 1); void refreshCounts(); }} />;
@@ -594,6 +600,15 @@ export function TripScreen() {
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 3 2.8 19h18.4L12 3Z" />
                 <path d="M12 9v4m0 3h.01" />
+              </svg>
+            </button>
+            )}
+            {!blocked('fares') && (
+            <button type="button" className="trip-tool-button box-tool"
+              aria-label="Taquilla" title="Taquilla" onClick={() => setTaquilla(true)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 0 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" />
+                <path d="M14 5v2m0 3v2m0 3v2" />
               </svg>
             </button>
             )}

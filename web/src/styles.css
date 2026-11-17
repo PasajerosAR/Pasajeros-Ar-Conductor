@@ -893,7 +893,7 @@ td {
 }
 .trip-tool-actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     justify-items: center;
     gap: 14px;
 }
@@ -925,6 +925,11 @@ td {
 }
 .driver-app .trip-tool-button.incident-tool {
     color: var(--driver-notice-warn-text);
+}
+.driver-app .trip-tool-button.box-tool {
+    color: var(--driver-notice-ok-text);
+    background: var(--driver-notice-ok-bg);
+    border-color: var(--driver-notice-ok-border);
 }
 .driver-app .trip-tool-button.is-active {
     background: var(--driver-brand-soft);
@@ -2210,3 +2215,198 @@ tr.sel-row {
       justify-content: space-evenly;
       min-width: 0;
     }
+
+/* TAQUILLA DEL CONDUCTOR (elegir asientos y generar el cobro) */
+.driver-app .taquilla-stop {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+}
+.driver-app .taquilla-stop select {
+    font-size: 14px;
+    padding-left: 10px;
+    padding-right: 6px;
+}
+.driver-app .taquilla-floors {
+    display: flex;
+    gap: 8px;
+}
+  .driver-app .taquilla-floors button {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 52px;
+      padding: 8px 10px;
+      border: 1px solid var(--driver-panel-border);
+      border-radius: 14px;
+      background: var(--driver-subtle-bg);
+      color: var(--driver-muted);
+      font-weight: 700;
+  }
+  .driver-app .taquilla-floors button small {
+      font-size: 11px;
+      font-weight: 500;
+  }
+  .driver-app .taquilla-floors button.is-active {
+      background: var(--driver-brand-soft);
+      border-color: var(--driver-link);
+      color: var(--driver-link);
+  }
+.driver-app .taquilla-pax {
+    display: grid;
+    gap: 8px;
+}
+  .driver-app .taquilla-pax fieldset {
+      display: grid;
+      grid-template-columns: 1fr 120px;
+      gap: 6px;
+      margin: 0;
+      padding: 6px 8px 8px;
+      border: 1px solid var(--driver-panel-border);
+      border-radius: 12px;
+  }
+  .driver-app .taquilla-pax legend {
+      padding: 0 4px;
+      font-size: 12px;
+      color: var(--driver-muted);
+  }
+.driver-app .taquilla-methods {
+    display: flex;
+    gap: 8px;
+}
+  .driver-app .taquilla-methods button {
+      flex: 1;
+      min-height: 44px;
+      padding: 6px 8px;
+      border: 1px solid var(--driver-panel-border);
+      border-radius: 12px;
+      background: var(--driver-subtle-bg);
+      color: var(--driver-muted);
+      font-size: 13px;
+      font-weight: 700;
+  }
+  .driver-app .taquilla-methods button.is-active {
+      background: var(--driver-brand-soft);
+      border-color: var(--driver-link);
+      color: var(--driver-link);
+  }
+.driver-app .taquilla-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    font-size: 12px;
+    color: var(--driver-muted);
+}
+  .driver-app .taquilla-legend span {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+  }
+  .driver-app .taquilla-legend i {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+  }
+.driver-app .taquilla-legend .free,
+.driver-app .taquilla-seat.free {
+    background: var(--driver-notice-ok-bg);
+    border-color: var(--driver-notice-ok-border);
+    color: var(--driver-notice-ok-text);
+}
+.driver-app .taquilla-legend .busy,
+.driver-app .taquilla-seat.busy {
+    background: var(--driver-notice-error-bg);
+    border-color: var(--driver-notice-error-border);
+    color: var(--driver-notice-error-text);
+}
+.driver-app .taquilla-legend .off,
+.driver-app .taquilla-seat.off {
+    background: var(--driver-subtle-bg);
+    border: 1px dashed var(--driver-control-border);
+    color: var(--driver-muted);
+}
+.driver-app .taquilla-legend .selected,
+.driver-app .taquilla-seat.selected {
+    background: linear-gradient(110deg, #348fe0, #1768b1);
+    border-color: var(--driver-link);
+    color: #fff;
+}
+.driver-app .taquilla-plan {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--driver-panel-border);
+    border-radius: 16px;
+    background: var(--driver-panel-bg);
+}
+.driver-app .taquilla-seat {
+    min-height: 46px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    font-size: 14px;
+    font-weight: 800;
+    box-shadow: none;
+}
+.driver-app .taquilla-seat.busy,
+.driver-app .taquilla-seat.off {
+    opacity: .85;
+}
+.driver-app .taquilla-cell {
+    min-height: 46px;
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--driver-panel-border);
+    border-radius: 11px;
+    color: var(--driver-muted);
+    font-size: 11px;
+    text-align: center;
+}
+.driver-app .taquilla-bottom {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 0 max(6px, env(safe-area-inset-bottom));
+    background: var(--driver-page-bg);
+}
+.driver-app .taquilla-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 14px;
+}
+  .driver-app .taquilla-summary > div {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+  }
+  .driver-app .taquilla-summary .taquilla-sum-total {
+      padding-top: 6px;
+      border-top: 1px solid var(--driver-panel-border);
+      font-size: 17px;
+  }
+.driver-app .taquilla-total {
+    text-align: center;
+    font-size: 32px;
+    font-weight: 800;
+}
+.driver-app .taquilla-qr {
+    width: min(100%, 320px);
+    margin: 0 auto;
+    padding: 14px;
+    border: 1px solid var(--driver-panel-border);
+    border-radius: 18px;
+    background: #fff;
+}
+  .driver-app .taquilla-qr svg {
+      display: block;
+      width: 100%;
+      height: auto;
+  }
