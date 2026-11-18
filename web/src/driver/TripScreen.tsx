@@ -643,6 +643,11 @@ export function TripScreen() {
         </>
       )}
 
+      {/* Finalizar va debajo de Mapa e Incidencia (y de sus paneles si están abiertos); no es fijo */}
+      {t.status === 'in_progress' && (
+        <button className="stop" style={{ width: '100%' }} disabled={busy || autoAdvancing} onClick={finish}>Finalizar viaje</button>
+      )}
+
       {t.status === 'in_progress' && (
         <div className="driver-sticky-finish">
           {lockedMsg && <div className="notice warn" role="status">{lockedMsg}</div>}
@@ -666,11 +671,6 @@ export function TripScreen() {
             </button>
           </div>
         </div>
-      )}
-
-      {/* Finalizar no es fijo: queda siempre al final de la pantalla y hay que deslizar hasta abajo */}
-      {t.status === 'in_progress' && (
-        <button className="stop" style={{ width: '100%' }} disabled={busy || autoAdvancing} onClick={finish}>Finalizar viaje</button>
       )}
 
       {t.status === 'completed' && (
