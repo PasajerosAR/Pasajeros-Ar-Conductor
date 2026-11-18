@@ -13,6 +13,7 @@ export interface Profile {
   full_name: string;
   dni: string | null;
   phone: string | null;
+  legajo?: string | null;
   active: boolean;
 }
 
@@ -87,7 +88,7 @@ export const VEHICLE_KIND_LABEL: Record<Vehicle['kind'], string> = {
   combi: 'Combi', minibus: 'Minibús', colectivo: 'Colectivo'
 };
 
-export type IncidentKind = 'breakdown' | 'delay' | 'accident' | 'traffic' | 'other';
+export type IncidentKind = 'breakdown' | 'delay' | 'accident' | 'traffic' | 'other' | 'panic';
 export const INCIDENT_LABEL: Record<IncidentKind, string> = {
-  breakdown: 'Falla mecánica', delay: 'Demora', accident: 'Accidente', traffic: 'Tránsito o corte', other: 'Otra'
+  breakdown: 'Falla mecánica', delay: 'Demora', accident: 'Accidente', traffic: 'Tránsito o corte', other: 'Otra', panic: 'EMERGENCIA'
 };
