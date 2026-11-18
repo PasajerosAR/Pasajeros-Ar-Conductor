@@ -8,5 +8,7 @@ export const configured = Boolean(url && key && !url.includes('TU-PROYECTO'));
 // Si falta la configuracion se usa un cliente inerte y la app muestra instrucciones.
 export const supabase = createClient(
   configured ? url! : 'http://localhost:54321',
-  configured ? key! : 'sin-configurar'
+  configured ? key! : 'sin-configurar',
+  // Clave propia: las webs comparten el mismo origen en GitHub Pages y sin esto compartirían la sesión.
+  { auth: { storageKey: 'pasajerosar-conductor-auth' } }
 );

@@ -67,8 +67,17 @@ export function TripScreen() {
   const navigate = useNavigate();
   const { blockedFeatures } = useAuth();   // funciones que el administrador general le bloqueó a la empresa
   const blocked = (feature: string) => blockedFeatures.includes(feature);
+
+  // Tocar una función bloqueada no hace nada: solo avisa (el botón se ve opaco).
+  const lockedTimer = useRef<number | undefined>(undefined);
+  const showLocked = (name: string) => {
+    setLockedMsg(`${name}: función bloqueada para tu empresa.`);
+    window.clearTimeout(lockedTimer.current);
+    lockedTimer.current = window.setTimeout(() => setLockedMsg(null), 3500);
+  };
   const [now, setNow] = useState(() => new Date());
   const [error, setError] = useState<string | null>(null);
+  const [lockedMsg, setLockedMsg] = useState<string | null>(null);   // aviso al tocar una función bloqueada
   const [warn, setWarn] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [qty, setQty] = useState(1);
@@ -585,41 +594,25 @@ export function TripScreen() {
             </>
           )}
 
-          <div className="trip-tool-actions" role="group" aria-label="Herramientas del viaje">
+          <div className="trip-tool-actions" role="group" aria-label="Mapa e incidencias">
             <button type="button" className={`trip-tool-button map-tool${showMap ? ' is-active' : ''}`}
               aria-label={showMap ? 'Ocultar mapa' : 'Mostrar mapa'} title={showMap ? 'Ocultar mapa' : 'Mostrar mapa'}
               aria-pressed={showMap} onClick={() => setShowMap(!showMap)}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15m6-12v15" />
               </svg>
+              <span>Mapa</span>
             </button>
-            {!blocked('incidents') && (
-            <button type="button" className={`trip-tool-button incident-tool${incOpen ? ' is-active' : ''}`}
+            <button type="button" className={`trip-tool-button incident-tool${incOpen && !blocked('incidents') ? ' is-active' : ''}${blocked('incidents') ? ' is-locked' : ''}`}
               aria-label={incOpen ? 'Cerrar incidencia' : 'Informar incidencia'} title={incOpen ? 'Cerrar incidencia' : 'Informar incidencia'}
-              aria-pressed={incOpen} onClick={() => setIncOpen(!incOpen)}>
+              aria-disabled={blocked('incidents')} aria-pressed={blocked('incidents') ? undefined : incOpen}
+              onClick={() => (blocked('incidents') ? showLocked('Incidencias') : setIncOpen(!incOpen))}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M12 3 2.8 19h18.4L12 3Z" />
                 <path d="M12 9v4m0 3h.01" />
               </svg>
+              <span>Incidencia</span>
             </button>
-            )}
-            {!blocked('fares') && (
-            <button type="button" className="trip-tool-button box-tool"
-              aria-label="Taquilla" title="Taquilla" onClick={() => setTaquilla(true)}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 0 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" />
-                <path d="M14 5v2m0 3v2m0 3v2" />
-              </svg>
-            </button>
-            )}
-            {!blocked('scanner') && (
-            <button type="button" className="trip-tool-button scan-tool"
-              aria-label="Escanear pasaje" title="Escanear pasaje" onClick={() => setScanning(true)}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 8V5a1 1 0 0 1 1-1h3m8 0h3a1 1 0 0 1 1 1v3m0 8v3a1 1 0 0 1-1 1h-3m-8 0H5a1 1 0 0 1-1-1v-3M4 12h16" />
-              </svg>
-            </button>
-            )}
           </div>
 
           {showMap && <RouteMap
@@ -652,8 +645,32 @@ export function TripScreen() {
 
       {t.status === 'in_progress' && (
         <div className="driver-sticky-finish">
-          <button className="stop" style={{ width: '100%' }} disabled={busy || autoAdvancing} onClick={finish}>Finalizar viaje</button>
+          {lockedMsg && <div className="notice warn" role="status">{lockedMsg}</div>}
+          <div className="trip-tool-actions" role="group" aria-label="Taquilla y escáner">
+            <button type="button" className={`trip-tool-button box-tool${blocked('fares') ? ' is-locked' : ''}`}
+              aria-label="Taquilla" title="Taquilla" aria-disabled={blocked('fares')}
+              onClick={() => (blocked('fares') ? showLocked('Taquilla') : setTaquilla(true))}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 0 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" />
+                <path d="M14 5v2m0 3v2m0 3v2" />
+              </svg>
+              <span>Taquilla</span>
+            </button>
+            <button type="button" className={`trip-tool-button scan-tool${blocked('scanner') ? ' is-locked' : ''}`}
+              aria-label="Escanear pasaje" title="Escanear pasaje" aria-disabled={blocked('scanner')}
+              onClick={() => (blocked('scanner') ? showLocked('Escáner') : setScanning(true))}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 8V5a1 1 0 0 1 1-1h3m8 0h3a1 1 0 0 1 1 1v3m0 8v3a1 1 0 0 1-1 1h-3m-8 0H5a1 1 0 0 1-1-1v-3M4 12h16" />
+              </svg>
+              <span>Escáner</span>
+            </button>
+          </div>
         </div>
+      )}
+
+      {/* Finalizar no es fijo: queda siempre al final de la pantalla y hay que deslizar hasta abajo */}
+      {t.status === 'in_progress' && (
+        <button className="stop" style={{ width: '100%' }} disabled={busy || autoAdvancing} onClick={finish}>Finalizar viaje</button>
       )}
 
       {t.status === 'completed' && (

@@ -893,18 +893,21 @@ td {
 }
 .trip-tool-actions {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    justify-items: center;
-    gap: 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));   /* los dos botones se reparten el ancho */
+    gap: 10px;
 }
 .driver-app .trip-tool-button {
-    display: grid;
-    place-items: center;
-    width: 58px;
-    min-width: 58px;
-    height: 58px;
-    min-height: 58px;
-    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    height: 52px;
+    min-height: 52px;
+    padding: 0 10px;
+    font-size: 15px;
+    font-weight: 700;
     border: 1px solid var(--driver-panel-border);
     border-radius: 18px;
     background: var(--driver-subtle-bg);
@@ -940,7 +943,11 @@ td {
     border-color: var(--driver-notice-warn-border);
     color: var(--driver-notice-warn-text);
 }
-.driver-app .trip-tool-button:hover:not(:disabled) {
+.driver-app .trip-tool-button.is-locked {
+    opacity: 0.45;   /* función bloqueada: se ve opaca y al tocarla avisa */
+    box-shadow: none;
+}
+.driver-app .trip-tool-button:hover:not(:disabled):not(.is-locked) {
     transform: translateY(-2px);
 }
 .driver-app .count-confirmation {
@@ -1629,6 +1636,10 @@ tr.sel-row {
 .driver-sticky-finish {
   position: sticky;
   bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding-top: 8px;
   background: var(--driver-page-bg);
 }
@@ -1933,10 +1944,8 @@ tr.sel-row {
     height: 22px;
   }
   .driver-app .trip-tool-button {
-    width: 54px;
-    min-width: 54px;
-    height: 54px;
-    min-height: 54px;
+    height: 50px;
+    min-height: 50px;
   }
   .route-map-navigation-status {
     top: max(12px, env(safe-area-inset-top));
