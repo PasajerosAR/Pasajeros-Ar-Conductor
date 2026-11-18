@@ -52,7 +52,7 @@ export function RouteMap({
   useEffect(() => {
     if (!el.current) return;
     const m = L.map(el.current, {
-      zoomControl: true,
+      zoomControl: false,
       rotate: true,
       rotateControl: false,
       dragRotate: false,
@@ -61,6 +61,7 @@ export function RouteMap({
       attributionControl: false,
       preventPageGestures: false
     }).setView([-31.7333, -60.5236], 11);
+    L.control.zoom({ position: 'bottomleft' }).addTo(m);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; colaboradores de OpenStreetMap' }).addTo(m);
     map.current = m;
     const manual = () => {

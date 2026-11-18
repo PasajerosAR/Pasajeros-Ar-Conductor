@@ -1074,6 +1074,22 @@ td {
   color: var(--driver-text);
   border-color: var(--driver-panel-border);
 }
+.driver-shell .leaflet-control-zoom {
+  margin: 0 0 40px 20px;
+  border: 1px solid var(--driver-panel-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 3px 12px #0004;
+}
+.driver-shell .leaflet-control-zoom a {
+  width: 40px;
+  height: 54px;
+  line-height: 40px;
+  border: 0;
+}
+.driver-shell .leaflet-control-zoom-in {
+  border-bottom: 1px solid var(--driver-panel-border) !important;
+}
 .driver-shell .leaflet-control-zoom a:hover {
   background: var(--driver-subtle-bg);
   color: var(--driver-text);
