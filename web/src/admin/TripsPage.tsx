@@ -38,7 +38,7 @@ export function TripsPage() {
     .eq('service_date', date).order('scheduled_departure')) as unknown as TripRow[], [date]);
   const incidents = useQuery(async () => {
     const from = new Date(`${date}T00:00:00`), to = new Date(from.getTime() + 24 * 3600 * 1000);
-    return must(await supabase.from('incidents').select('id,kind,note,created_at,trips(services(code)),profiles(full_name)')
+    return must(await supabase.from('incidents').select('id,kind,note,created_at,trips(services(code)),profiles!driver_id(full_name)')
       .gte('created_at', from.toISOString()).lt('created_at', to.toISOString()).order('created_at', { ascending: false })) as unknown as IncidentRow[];
   }, [date]);
   const vehicles = useQuery(async () => must(await supabase.from('vehicles').select('*').order('internal_number')) as Vehicle[], []);
