@@ -23,7 +23,9 @@ interface ScanResult {
   over_capacity?: boolean;
   boarding_override?: boolean;
 }
-interface PendingOverride { code: string; event: string; stopId: string; boardingStop: string; actualStop: string }
+interface PendingOverride { code: string; event: string; stopId: string; boardingStop: string; actualStop: string; manual?: boolean }
+// sin GPS confiable el conductor puede confirmar el ascenso a mano
+const GPS_CODES = ['GPS_REQUIRED', 'GPS_NOT_AT_STOP', 'GPS_STOP_AMBIGUOUS', 'GPS_STOPS_UNCONFIGURED', 'GPS_STOP_CHANGED'];
 interface ManualLookupResult {
   ok: boolean;
   title: string;
@@ -32,6 +34,8 @@ interface ManualLookupResult {
   passenger_name?: string;
   boarding_stop?: string | null;
   alighting_stop?: string | null;
+  seat?: string | null;
+  pending?: number;
 }
 interface GpsFix { latitude: number; longitude: number; accuracyM: number; timestamp: number }
 interface Props { tripId: string; layoutId: string | null; stopId: string; stopName: string; gpsFix: GpsFix | null; onBack: () => void; onCounted: () => void }
@@ -114,9 +118,11 @@ export function ScanPanel({ tripId: id, layoutId, stopId, stopName, gpsFix, onBa
 
   useEffect(() => { void loadCounts(id, layoutId).then(setCounts); }, [id, layoutId]);
   const sold = useQuery(async () => {
-    const result = await supabase.from('tickets').select('id', { count: 'exact', head: true }).eq('trip_id', id).neq('status', 'cancelled');
-    if (result.error) throw new Error(result.error.message);
-    return result.count ?? 0;
+    const [real, test] = await Promise.all(['sale_tickets', 'tickets'].map((table) =>
+      supabase.from(table).select('id', { count: 'exact', head: true }).eq('trip_id', id).neq('status', 'cancelled')));
+    if (real.error) throw new Error(real.error.message);
+    if (test.error) throw new Error(test.error.message);
+    return (real.count ?? 0) + (test.count ?? 0);
   }, [id]);
 
   const disarm = useCallback(() => { armedRef.current = false; setArmed(false); window.clearTimeout(armTimer.current); }, []);
@@ -136,13 +142,14 @@ export function ScanPanel({ tripId: id, layoutId, stopId, stopName, gpsFix, onBa
     if (manual) disarm();
     setPendingOverride(null);
 
+    const event = crypto.randomUUID();
     if (!usableGpsFix(gpsFix, now)) {
-      setResult({ ok: false, code: 'GPS_REQUIRED', title: 'No se pudo verificar la parada', detail: 'Se necesita una ubicación GPS reciente y precisa (máximo 50 m). Activá la ubicación y volvé a escanear.' });
+      setResult({ ok: false, code: 'GPS_REQUIRED', title: 'Sin ubicación GPS confiable', detail: 'No se pudo verificar la parada. Podés confirmar el ascenso a mano.' });
+      setPendingOverride({ code: payload, event, stopId: stopRef.current, boardingStop: '', actualStop: stopName, manual: true });
       feedback(false);
       return;
     }
 
-    const event = crypto.randomUUID();
     const { data, error } = await supabase.rpc('scan_ticket', {
       p_trip: id,
       p_code: payload,
@@ -168,6 +175,9 @@ export function ScanPanel({ tripId: id, layoutId, stopId, stopName, gpsFix, onBa
         actualStop: r.actual_stop ?? stopName
       });
     }
+    if (!r.ok && r.code && GPS_CODES.includes(r.code)) {
+      setPendingOverride({ code: payload, event, stopId: stopRef.current, boardingStop: '', actualStop: stopName, manual: true });
+    }
     if (!r.ok) { setResult(r); feedback(false); return; }
     setCounts({ onboard: r.onboard ?? 0, capacity: r.capacity ?? 0 });
     onCounted();
@@ -178,21 +188,25 @@ export function ScanPanel({ tripId: id, layoutId, stopId, stopName, gpsFix, onBa
   const allowBoarding = async () => {
     if (!pendingOverride || overrideBusy) return;
     const now = Date.now();
-    if (!usableGpsFix(gpsFix, now)) {
+    if (!pendingOverride.manual && !usableGpsFix(gpsFix, now)) {
       setResult({ ok: false, code: 'GPS_REQUIRED', title: 'No se pudo verificar la parada', detail: 'Necesitamos una ubicación GPS reciente y precisa para autorizar el ascenso.' });
       return;
     }
     setOverrideBusy(true);
-    const { data, error } = await supabase.rpc('override_ticket_boarding', {
-      p_trip: id,
-      p_code: pendingOverride.code,
-      p_stop: pendingOverride.stopId,
-      p_event: pendingOverride.event,
-      p_lat: gpsFix.latitude,
-      p_lng: gpsFix.longitude,
-      p_accuracy_m: gpsFix.accuracyM,
-      p_fix_at: new Date(gpsFix.timestamp).toISOString()
-    });
+    const { data, error } = pendingOverride.manual
+      ? await supabase.rpc('confirm_ticket_boarding', {
+        p_trip: id, p_code: pendingOverride.code, p_stop: pendingOverride.stopId || null, p_event: pendingOverride.event
+      })
+      : await supabase.rpc('override_ticket_boarding', {
+        p_trip: id,
+        p_code: pendingOverride.code,
+        p_stop: pendingOverride.stopId,
+        p_event: pendingOverride.event,
+        p_lat: gpsFix!.latitude,
+        p_lng: gpsFix!.longitude,
+        p_accuracy_m: gpsFix!.accuracyM,
+        p_fix_at: new Date(gpsFix!.timestamp).toISOString()
+      });
     setOverrideBusy(false);
     if (error) {
       setResult({ ok: false, title: 'No se pudo autorizar el ascenso', detail: friendly(error) });
@@ -365,15 +379,26 @@ export function ScanPanel({ tripId: id, layoutId, stopId, stopName, gpsFix, onBa
 
           {pendingOverride && (
             <div className="panel" role="group" aria-labelledby="boarding-override-title">
-              <b id="boarding-override-title">¿Autorizar el ascenso en esta parada?</b>
-              <div>El pasaje indica ascenso en: <b>{pendingOverride.boardingStop}</b></div>
-              <div>La unidad está en: <b>{pendingOverride.actualStop}</b></div>
-              <p className="muted" style={{ margin: 0 }}>
-                Si autorizás, se registrará esta parada como el lugar real de ascenso. La acción queda auditada.
-              </p>
+              <b id="boarding-override-title">{pendingOverride.manual ? '¿Confirmar el ascenso a mano?' : '¿Autorizar el ascenso en esta parada?'}</b>
+              {pendingOverride.manual ? (
+                <>
+                  {pendingOverride.actualStop && <div>Parada prevista: <b>{pendingOverride.actualStop}</b></div>}
+                  <p className="muted" style={{ margin: 0 }}>
+                    No se pudo verificar la parada por GPS. Si confirmás, el ascenso se registra como confirmado manualmente por vos. La acción queda auditada.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div>El pasaje indica ascenso en: <b>{pendingOverride.boardingStop}</b></div>
+                  <div>La unidad está en: <b>{pendingOverride.actualStop}</b></div>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Si autorizás, se registrará esta parada como el lugar real de ascenso. La acción queda auditada.
+                  </p>
+                </>
+              )}
               <div className="row">
                 <button type="button" className="primary" onClick={() => { void allowBoarding(); }} disabled={overrideBusy}>
-                  {overrideBusy ? 'Registrando…' : 'Permitir ascenso aquí'}
+                  {overrideBusy ? 'Registrando…' : pendingOverride.manual ? 'Confirmar ascenso' : 'Permitir ascenso aquí'}
                 </button>
                 <button type="button" className="secondary" onClick={() => setPendingOverride(null)} disabled={overrideBusy}>
                   Cancelar
@@ -429,6 +454,7 @@ export function ScanPanel({ tripId: id, layoutId, stopId, stopName, gpsFix, onBa
                   <b>{manualResult.title}</b>
                   <div>{manualResult.detail}</div>
                   {manualResult.passenger_name && <div>Pasajero: {manualResult.passenger_name}</div>}
+                  {manualResult.seat && <div>Asiento: {manualResult.seat}</div>}
                   {manualResult.boarding_stop && <div>Asciende en: {manualResult.boarding_stop}</div>}
                   {manualResult.alighting_stop && <div>Desciende en: {manualResult.alighting_stop}</div>}
                   {manualResult.can_board && (

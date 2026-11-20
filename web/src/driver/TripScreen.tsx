@@ -142,8 +142,14 @@ export function TripScreen() {
     : null, [nextService?.dep.route_id, nextService?.tomorrow]);
 
   // pasajes del viaje (con parada de subida y bajada): de acá sale lo previsto en cada parada
-  const tickets = useQuery(async () => must(await supabase.from('tickets').select('boarding_stop_id,alighting_stop_id,status').eq('trip_id', id)) as
-    { boarding_stop_id: string; alighting_stop_id: string; status: 'valid' | 'boarded' | 'cancelled' }[], [id, tick]);
+  // pasajes del viaje: los vendidos (web, ventanilla, taquilla) están en sale_tickets; los de prueba en tickets
+  const tickets = useQuery(async () => {
+    const real = must(await supabase.from('sale_tickets').select('from_stop_id,to_stop_id,status').eq('trip_id', id)) as
+      { from_stop_id: string; to_stop_id: string; status: 'valid' | 'boarded' | 'cancelled' }[];
+    const test = must(await supabase.from('tickets').select('boarding_stop_id,alighting_stop_id,status').eq('trip_id', id)) as
+      { boarding_stop_id: string; alighting_stop_id: string; status: 'valid' | 'boarded' | 'cancelled' }[];
+    return [...real.map((k) => ({ boarding_stop_id: k.from_stop_id, alighting_stop_id: k.to_stop_id, status: k.status })), ...test];
+  }, [id, tick]);
 
   const gps = useGps(t?.status === 'in_progress');
   useEffect(() => {
