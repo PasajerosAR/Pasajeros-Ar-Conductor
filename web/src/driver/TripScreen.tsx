@@ -183,7 +183,8 @@ export function TripScreen() {
     void Promise.resolve(supabase.rpc('advance_service_trip', {
       p_trip: t.id,
       p_next_departure: upcoming.dep.id,
-      p_force: false
+      p_force: false,
+      p_arrived: true   // última parada: los pasajeros a bordo descienden ahí
     }))
       .then(({ data, error: advanceError }) => {
         setAutoAdvancing(false);
@@ -273,14 +274,19 @@ export function TripScreen() {
     return scheduled;
   };
   const forceNextTrip = async () => {
-    if (!nextService || nextService.tomorrow || busy || autoAdvancing) return;
+    if (busy || autoAdvancing) return;
+    if (!nextService || nextService.tomorrow) {
+      window.alert('No hay otra salida de este servicio para cambiar de sentido hoy.');
+      return;
+    }
+    const onboard = counts?.onboard ?? 0;
+    const msg = `¿Forzar el cambio de sentido y comenzar ${nextRouteName(nextService.dep.route_id)} (${nextService.dep.departure_time.slice(0, 5)})?`
+      + (onboard ? `\n\nFiguran ${onboard} pasajero${onboard === 1 ? '' : 's'} a bordo. El viaje cambiará igual y el próximo comienza con el conteo en cero.` : '');
+    if (!window.confirm(msg)) return;
     setBusy(true);
     setError(null);
     advanceAttempted.current = t.id;
     try {
-      if (counts?.onboard) {
-        window.alert(`Aviso: figuran ${counts.onboard} pasajero${counts.onboard === 1 ? '' : 's'} a bordo. El viaje cambiará igual y el próximo comienza con el conteo en cero.`);
-      }
       const { data, error: advanceError } = await supabase.rpc('advance_service_trip', {
         p_trip: t.id,
         p_next_departure: nextService.dep.id,
@@ -289,12 +295,14 @@ export function TripScreen() {
       if (advanceError) {
         advanceAttempted.current = null;
         setError(friendly(advanceError));
+        window.alert(`No se pudo cambiar de sentido: ${friendly(advanceError)}`);
         return;
       }
       navigate(`/conductor/viaje/${(data as { id: string }).id}`, { replace: true });
     } catch (advanceError: unknown) {
       advanceAttempted.current = null;
       setError(friendly(advanceError));
+      window.alert(`No se pudo cambiar de sentido: ${friendly(advanceError)}`);
     } finally {
       setBusy(false);
     }
@@ -490,7 +498,7 @@ export function TripScreen() {
           </div>
           <button type="button" className="direction-switch driver-trip-direction-switch"
             onClick={() => void forceNextTrip()}
-            disabled={busy || autoAdvancing || nextDeps.loading || !nextService || nextService.tomorrow}
+            disabled={busy || autoAdvancing || nextDeps.loading}
             aria-label="Forzar el próximo viaje"
             title="Forzar el próximo viaje">
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4" /></svg>

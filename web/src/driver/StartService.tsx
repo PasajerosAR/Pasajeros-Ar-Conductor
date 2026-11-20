@@ -43,6 +43,7 @@ export function StartService() {
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
   }, []);
   const [vehicleId, setVehicleId] = useState(readLast);
+  const [vehicleTouched, setVehicleTouched] = useState(false);
   const [reason, setReason] = useState('');
   const [takeover, setTakeover] = useState(false); // el viaje está en curso con otro conductor: pide motivo
   const [reopening, setReopening] = useState(false);
@@ -57,6 +58,9 @@ export function StartService() {
   const services = useQuery(async () => must(await supabase.from('services').select('id,code,active').eq('active', true).order('code')) as Service[], []);
   const routes = useQuery(async () => must(await supabase.from('routes').select('id,name')) as Pick<Route, 'id' | 'name'>[], []);
   const vehicles = useQuery(async () => must(await supabase.from('vehicles').select('id,internal_number,plate,status').order('internal_number')) as Pick<Vehicle, 'id' | 'internal_number' | 'plate' | 'status'>[], []);
+  // salidas activas de todos los servicios: la lista solo muestra los que tienen salidas para el tipo de día elegido
+  const allDeps = useQuery(async () => must(await supabase.from('service_departures').select('service_id,day_types').eq('active', true)) as Pick<ServiceDeparture, 'service_id' | 'day_types'>[], []);
+  const available = (services.data ?? []).filter((s) => (allDeps.data ?? []).some((d) => d.service_id === s.id && d.day_types.includes(dayType)));
   const service = (services.data ?? []).find((s) => s.code.toLowerCase() === code.trim().toLowerCase()) ?? null;
   const deps = useQuery(async () => service
     ? must(await supabase.from('service_departures').select('*').eq('service_id', service.id).eq('active', true).order('departure_time')) as ServiceDeparture[]
@@ -66,8 +70,16 @@ export function StartService() {
     .eq('status', 'completed').eq('service_date', serviceDate).order('ended_at', { ascending: false }).limit(1).maybeSingle()) as unknown as
     { service_id: string; service_departures: { route_id: string } | null } | null, [serviceDate]);
 
+  const assigned = useQuery(async () => service
+    ? must(await supabase.from('trips').select('departure_id,vehicle_id').eq('service_id', service.id).eq('service_date', serviceDate)
+        .eq('status', 'scheduled').not('vehicle_id', 'is', null)) as { departure_id: string; vehicle_id: string }[]
+    : [], [service?.id, serviceDate]);
   const origins = useQuery(async () => must(await supabase.from('route_stops').select('route_id,name,lat,lng').eq('position', 1)) as
     { route_id: string; name: string; lat: number | null; lng: number | null }[], []);
+  // si el tipo de día cambia y el servicio elegido ya no corresponde, se limpia
+  useEffect(() => {
+    if (allDeps.data && code && !available.some((s) => s.code.toLowerCase() === code.trim().toLowerCase())) setCode('');
+  }, [dayType, allDeps.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const forType = (deps.data ?? []).filter((d) => d.day_types.includes(dayType));
   const routeIds = [...new Set(forType.map((d) => d.route_id))];
   const suggested = last.data && service && last.data.service_id === service.id
@@ -84,8 +96,16 @@ export function StartService() {
   const forced = picked ? needsReason(minutes) : false;
   const routeName = (id: string | null) => routes.data?.find((r) => r.id === id)?.name ?? '-';
   const freeVehicles = (vehicles.data ?? []).filter((v) => !UNAVAILABLE.includes(v.status));
+  const assignedId = (assigned.data ?? []).find((t) => t.departure_id === picked?.id)?.vehicle_id ?? null;
+  const assignedVehicle = (vehicles.data ?? []).find((v) => v.id === assignedId) ?? null;
+  const assignedUsable = !!assignedVehicle && !UNAVAILABLE.includes(assignedVehicle.status);
   const reasonNeeded = forced || takeover || reopening;
   const ready = !!(service && picked && serviceDate && vehicleId && (!reasonNeeded || reason.trim().length >= 3));
+
+  // la unidad asignada aparece elegida de entrada; el conductor puede cambiarla
+  useEffect(() => {
+    if (assignedId && assignedUsable && !vehicleTouched) setVehicleId(assignedId);
+  }, [assignedId, assignedUsable, vehicleTouched]);
 
   const resetReasonState = () => {
     setReason('');
@@ -141,25 +161,6 @@ export function StartService() {
       {error && <div className="notice error" role="alert">{error}</div>}
       {services.loading ? <Loading /> : (
         <>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span className="muted">Número de servicio</span>
-            <input value={code} onChange={(e) => { setCode(e.target.value); setRoutePick(null); setDepPick(null); setAutoDirection(false); setForcedDirection(false); resetReasonState(); }} inputMode="numeric" placeholder="Buscar o tocar un servicio" autoComplete="off" />
-          </label>
-          {!service && (
-            <div className="seg service-options" role="group" aria-label="Servicios disponibles">
-              {(services.data ?? []).filter((s) => s.code.toLowerCase().includes(code.trim().toLowerCase())).slice(0, 24).map((s) => (
-                <button key={s.id} type="button" onClick={() => { setCode(s.code); setRoutePick(null); setDepPick(null); setAutoDirection(false); setForcedDirection(false); resetReasonState(); }}>{s.code}</button>
-              ))}
-            </div>
-          )}
-          {code.trim() && !service && <div className="notice warn">No hay un servicio activo con el número {code.trim()}.</div>}
-
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span className="muted">Fecha del servicio</span>
-            <input type="date" value={serviceDate} onChange={(e) => changeServiceDate(e.target.value)} required />
-            <span className="muted">Elegí el día en que comienza el viaje. Para una salida a las 00:00, seleccioná la fecha del día que empieza.</span>
-          </label>
-
           <div>
             <div className="muted" style={{ marginBottom: 6 }}>Tipo de día</div>
             <div className="seg" role="group" aria-label="Tipo de día">
@@ -169,6 +170,21 @@ export function StartService() {
               ))}
             </div>
           </div>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span className="muted">Fecha del servicio</span>
+            <input type="date" value={serviceDate} onChange={(e) => changeServiceDate(e.target.value)} required />
+            <span className="muted">Elegí el día en que comienza el viaje. Para una salida a las 00:00, seleccioná la fecha del día que empieza.</span>
+          </label>
+
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span className="muted">Servicio ({DAY_TYPE_LABEL[dayType].toLowerCase()})</span>
+            <select value={service?.code ?? ''} disabled={allDeps.loading}
+              onChange={(e) => { setCode(e.target.value); setRoutePick(null); setDepPick(null); setAutoDirection(false); setForcedDirection(false); setVehicleTouched(false); resetReasonState(); }}>
+              <option value="">{available.length === 0 ? 'No hay servicios para este día' : 'Elegir servicio...'}</option>
+              {available.map((x) => <option key={x.id} value={x.code}>{x.code}</option>)}
+            </select>
+          </label>
 
           {service && (deps.loading ? <Loading /> : forType.length === 0 ? (
             <div className="notice warn">El servicio {service.code} no tiene salidas para {DAY_TYPE_LABEL[dayType].toLowerCase()}. Probá con otro tipo de día.</div>
@@ -218,10 +234,20 @@ export function StartService() {
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span className="muted">Unidad</span>
-                <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+                <select value={vehicleId} onChange={(e) => { setVehicleId(e.target.value); setVehicleTouched(true); }}>
                   <option value="">Elegir...</option>
-                  {freeVehicles.map((v) => <option key={v.id} value={v.id}>Interno {v.internal_number} ({v.plate})</option>)}
+                  {[...freeVehicles].sort((a, b) => Number(b.id === assignedId) - Number(a.id === assignedId)).map((v) => (
+                    <option key={v.id} value={v.id}>Interno {v.internal_number} ({v.plate}){v.id === assignedId ? ' · asignada' : ''}</option>
+                  ))}
                 </select>
+                {assignedVehicle && assignedUsable && (
+                  <span className={vehicleId === assignedId ? 'muted' : 'notice warn'} role="status">
+                    {vehicleId === assignedId
+                      ? `Se te asignó el Interno ${assignedVehicle.internal_number} (${assignedVehicle.plate}) para este viaje. Podés elegir otra unidad.`
+                      : `Elegiste otra unidad. La asignada era el Interno ${assignedVehicle.internal_number} (${assignedVehicle.plate}).`}
+                  </span>
+                )}
+                {assignedVehicle && !assignedUsable && <span className="notice warn" role="status">La unidad asignada (Interno {assignedVehicle.internal_number}) no está disponible. Elegí otra.</span>}
               </label>
 
               <button className="primary big" disabled={!ready || busy} onClick={start}>Iniciar viaje</button>
