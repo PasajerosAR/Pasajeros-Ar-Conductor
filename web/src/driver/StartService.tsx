@@ -70,9 +70,9 @@ export function StartService() {
     .eq('status', 'completed').eq('service_date', serviceDate).order('ended_at', { ascending: false }).limit(1).maybeSingle()) as unknown as
     { service_id: string; service_departures: { route_id: string } | null } | null, [serviceDate]);
 
+  // unidad que el administrador asignó al servicio (no depende del conductor)
   const assigned = useQuery(async () => service
-    ? must(await supabase.from('trips').select('departure_id,vehicle_id').eq('service_id', service.id).eq('service_date', serviceDate)
-        .eq('status', 'scheduled').not('vehicle_id', 'is', null)) as { departure_id: string; vehicle_id: string }[]
+    ? must(await supabase.rpc('service_assigned_vehicles', { p_service: service.id, p_date: serviceDate })) as { departure_id: string; vehicle_id: string }[]
     : [], [service?.id, serviceDate]);
   const origins = useQuery(async () => must(await supabase.from('route_stops').select('route_id,name,lat,lng').eq('position', 1)) as
     { route_id: string; name: string; lat: number | null; lng: number | null }[], []);
@@ -243,7 +243,7 @@ export function StartService() {
                 {assignedVehicle && assignedUsable && (
                   <span className={vehicleId === assignedId ? 'muted' : 'notice warn'} role="status">
                     {vehicleId === assignedId
-                      ? `Se te asignó el Interno ${assignedVehicle.internal_number} (${assignedVehicle.plate}) para este viaje. Podés elegir otra unidad.`
+                      ? `Unidad asignada a este servicio: Interno ${assignedVehicle.internal_number} (${assignedVehicle.plate}). Podés elegir otra unidad.`
                       : `Elegiste otra unidad. La asignada era el Interno ${assignedVehicle.internal_number} (${assignedVehicle.plate}).`}
                   </span>
                 )}
