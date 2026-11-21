@@ -1082,6 +1082,19 @@ td {
   color: var(--driver-link);
 }
 
+.driver-shell .leaflet-control-zoom a {
+  width: 52px;
+  height: 70px;
+  line-height: 66px;
+  font-size: 32px;
+  margin: 1px;
+}
+
+.leaflet-bottom .leaflet-control-zoom {
+  margin-bottom: 32px;
+  margin-left: 26px;
+}
+
 .center {
   max-width: 380px;
   margin: 12vh auto;
@@ -1735,7 +1748,7 @@ tr.sel-row {
   font-size: 16px;
   font-weight: 700;
 }
-.route-map-punctuality {
+.route-map-punctuality span{
   max-width: min(48vw, 170px);
   font-size: 36px;
   font-weight: 750;
@@ -1748,6 +1761,24 @@ tr.sel-row {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.route-map-punctuality:not(.early):not(.on_time):not(.late) {
+  width: min(55vw, 220px);
+  align-items: center;
+  text-align: center;
+}
+
+.route-map-punctuality:not(.early):not(.on_time):not(.late) > span {
+  width: 100%;
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+
 .route-map-status-dot {
   width: 7px;
   height: 7px;
