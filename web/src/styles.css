@@ -1858,7 +1858,7 @@ tr.sel-row {
   height: 48px;
   min-height: 48px;
   padding: 0;
-  margin: 0px 8px 8px 0px;
+  margin: 0px 26px 16px 0px;
   border: 1px solid var(--driver-panel-border);
   border-radius: 50%;
   background: var(--driver-panel-bg);
