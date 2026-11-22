@@ -58,6 +58,8 @@ export function StartService() {
   const services = useQuery(async () => must(await supabase.from('services').select('id,code,active').eq('active', true).order('code')) as Service[], []);
   const routes = useQuery(async () => must(await supabase.from('routes').select('id,name')) as Pick<Route, 'id' | 'name'>[], []);
   const vehicles = useQuery(async () => must(await supabase.from('vehicles').select('id,internal_number,plate,status').order('internal_number')) as Pick<Vehicle, 'id' | 'internal_number' | 'plate' | 'status'>[], []);
+  // unidades que tiene cada servicio con disposición de asientos: {servicio: [unidades]}. Sin entrada = cualquier unidad.
+  const compat = useQuery(async () => must(await supabase.rpc('service_layout_vehicles')) as Record<string, string[]>, []);
   // salidas activas de todos los servicios: la lista solo muestra los que tienen salidas para el tipo de día elegido
   const allDeps = useQuery(async () => must(await supabase.from('service_departures').select('service_id,day_types').eq('active', true)) as Pick<ServiceDeparture, 'service_id' | 'day_types'>[], []);
   const available = (services.data ?? []).filter((s) => (allDeps.data ?? []).some((d) => d.service_id === s.id && d.day_types.includes(dayType)));
@@ -95,17 +97,23 @@ export function StartService() {
   const minutes = picked ? minutesToDeparture(picked.departure_time, now, serviceDate) : 0;
   const forced = picked ? needsReason(minutes) : false;
   const routeName = (id: string | null) => routes.data?.find((r) => r.id === id)?.name ?? '-';
-  const freeVehicles = (vehicles.data ?? []).filter((v) => !UNAVAILABLE.includes(v.status));
+  const allowedVehicles = service ? compat.data?.[service.id] : undefined;
+  const freeVehicles = (vehicles.data ?? []).filter((v) => !UNAVAILABLE.includes(v.status) && (!allowedVehicles || allowedVehicles.includes(v.id)));
   const assignedId = (assigned.data ?? []).find((t) => t.departure_id === picked?.id)?.vehicle_id ?? null;
   const assignedVehicle = (vehicles.data ?? []).find((v) => v.id === assignedId) ?? null;
-  const assignedUsable = !!assignedVehicle && !UNAVAILABLE.includes(assignedVehicle.status);
+  const assignedUsable = !!assignedVehicle && freeVehicles.some((v) => v.id === assignedVehicle.id);
   const reasonNeeded = forced || takeover || reopening;
-  const ready = !!(service && picked && serviceDate && vehicleId && (!reasonNeeded || reason.trim().length >= 3));
+  const ready = !!(service && picked && serviceDate && vehicleId && freeVehicles.some((v) => v.id === vehicleId) && (!reasonNeeded || reason.trim().length >= 3));
 
   // la unidad asignada aparece elegida de entrada; el conductor puede cambiarla
   useEffect(() => {
     if (assignedId && assignedUsable && !vehicleTouched) setVehicleId(assignedId);
   }, [assignedId, assignedUsable, vehicleTouched]);
+
+  // la última unidad usada puede no servir para este servicio: se limpia
+  useEffect(() => {
+    if (service && vehicles.data && compat.data && vehicleId && !freeVehicles.some((v) => v.id === vehicleId)) setVehicleId('');
+  }, [service?.id, vehicles.data, compat.data, vehicleId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetReasonState = () => {
     setReason('');
@@ -248,6 +256,8 @@ export function StartService() {
                   </span>
                 )}
                 {assignedVehicle && !assignedUsable && <span className="notice warn" role="status">La unidad asignada (Interno {assignedVehicle.internal_number}) no está disponible. Elegí otra.</span>}
+                {allowedVehicles && <span className="muted" role="status">Este servicio tiene una disposición de asientos definida: solo se ofrecen las unidades que la tienen.</span>}
+                {allowedVehicles && freeVehicles.length === 0 && <span className="notice warn" role="status">No hay unidades disponibles con la disposición de este servicio. Avisale a la empresa.</span>}
               </label>
 
               <button className="primary big" disabled={!ready || busy} onClick={start}>Iniciar viaje</button>
