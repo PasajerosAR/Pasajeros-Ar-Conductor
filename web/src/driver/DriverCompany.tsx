@@ -6,7 +6,7 @@ import { DriverThemeToggle } from './DriverTheme';
 
 interface Msg { id: string; level: 'info' | 'important' | 'urgent'; body: string; created_at: string }
 const LEVEL: Record<Msg['level'], string> = { info: 'Informativo', important: 'Importante', urgent: 'Urgente' };
-const hhmm = (iso: string) => new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const hhmm = (iso: string) => new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
 export function DriverCompany() {
   const { profile, signOut } = useAuth();
