@@ -70,8 +70,12 @@ export function TaquillaPanel({ tripId, layoutId, routeId, stops, suggestedStopI
   const floors = useQuery(async () => layoutId
     ? must(await supabase.from('layout_floors').select('floor,rows,cols').eq('layout_id', layoutId).order('floor')) as { floor: number; rows: number; cols: number }[]
     : [], [layoutId]);
-  const prices = useQuery(async () => must(await supabase.from('ticket_prices')
-    .select('from_pos,to_pos,price,seat_class').eq('route_id', routeId).eq('active', true)) as TaquillaPrice[], [routeId]);
+  // la tarifa depende del tipo de día del viaje (hábil, sábado, domingo, feriado)
+  const prices = useQuery(async () => {
+    const trip = must(await supabase.from('trips').select('day_type').eq('id', tripId).single()) as { day_type: string };
+    return must(await supabase.from('ticket_prices')
+      .select('from_pos,to_pos,price,seat_class').eq('route_id', routeId).eq('day_type', trip.day_type).eq('active', true)) as TaquillaPrice[];
+  }, [routeId, tripId]);
   const reservations = useQuery(async () => must(await supabase.rpc('taquilla_seat_status', { p_trip: tripId })) as TaquillaRange[], [tripId]);
   // refresca el estado de los asientos mientras la pantalla está abierta
   const reloadRanges = reservations.reload;
