@@ -34,6 +34,7 @@ export function StartService() {
   const [autoDirection, setAutoDirection] = useState(params.get('autoSentido') === '1');
   const [forcedDirection, setForcedDirection] = useState(params.get('forzadoSentido') === '1');
   const [depPick, setDepPick] = useState<string | null>(params.get('salida'));
+  const [dateAuto, setDateAuto] = useState(!params.get('fecha')); // sin fecha pedida: pasada la medianoche se sugiere el día del servicio anterior
   const [pos, setPos] = useState<LatLng | null>(null);
 
   // ubicación (una sola vez) para sugerir el sentido según dónde está el conductor
@@ -82,6 +83,14 @@ export function StartService() {
   useEffect(() => {
     if (allDeps.data && code && !available.some((s) => s.code.toLowerCase() === code.trim().toLowerCase())) setCode('');
   }, [dayType, allDeps.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // servicio que pasa las 00:00: la salida de madrugada (ej. 00:45) pertenece al día de servicio anterior
+  useEffect(() => {
+    if (!dateAuto || !deps.data?.length) return;
+    setDateAuto(false);
+    const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const yesterday = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+    if (serviceDate === todayLocal() && deps.data.some((d) => d.next_day && Math.abs(minutesToDeparture(d.departure_time, now, yesterday, true)) <= WINDOW_MINUTES)) changeServiceDate(yesterday);
+  }, [deps.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const forType = (deps.data ?? []).filter((d) => d.day_types.includes(dayType));
   const routeIds = [...new Set(forType.map((d) => d.route_id))];
   const suggested = last.data && service && last.data.service_id === service.id
@@ -94,7 +103,7 @@ export function StartService() {
     ? distanceM(pos, [originOfSentido.lat, originOfSentido.lng]) : null;
   const options = forType.filter((d) => d.route_id === sentido);
   const picked = options.find((d) => d.id === depPick) ?? nearestDeparture(options, now, serviceDate);
-  const minutes = picked ? minutesToDeparture(picked.departure_time, now, serviceDate) : 0;
+  const minutes = picked ? minutesToDeparture(picked.departure_time, now, serviceDate, picked.next_day) : 0;
   const forced = picked ? needsReason(minutes) : false;
   const routeName = (id: string | null) => routes.data?.find((r) => r.id === id)?.name ?? '-';
   const allowedVehicles = service ? compat.data?.[service.id] : undefined;
@@ -181,7 +190,7 @@ export function StartService() {
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span className="muted">Fecha del servicio</span>
-            <input type="date" value={serviceDate} onChange={(e) => changeServiceDate(e.target.value)} required />
+            <input type="date" value={serviceDate} onChange={(e) => { setDateAuto(false); changeServiceDate(e.target.value); }} required />
             <span className="muted">Elegí el día en que comienza el viaje. Para una salida a las 00:00, seleccioná la fecha del día que empieza.</span>
           </label>
 
@@ -220,10 +229,10 @@ export function StartService() {
                 <div className="muted" style={{ marginBottom: 6 }}>Salida</div>
                 <div className="seg" role="group" aria-label="Salida">
                   {options.map((d) => {
-                    const m = minutesToDeparture(d.departure_time, now, serviceDate);
+                    const m = minutesToDeparture(d.departure_time, now, serviceDate, d.next_day);
                     return (
                       <button key={d.id} type="button" className={d.id === picked?.id ? 'primary' : ''} aria-pressed={d.id === picked?.id} onClick={() => { setDepPick(d.id); resetReasonState(); }}>
-                        {d.departure_time.slice(0, 5)}
+                        {d.departure_time.slice(0, 5)}{d.next_day ? <sup> +1</sup> : null}
                         <span style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>{m === 0 ? 'ahora' : m > 0 ? `en ${formatSpan(m)}` : `hace ${formatSpan(-m)}`}</span>
                       </button>
                     );

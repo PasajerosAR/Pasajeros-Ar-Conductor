@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { distanceM, nearestOrigin, nextDeparture, nextDepartureForRoute, serviceScheduleReferenceTime } from './tripPlan';
+import { minutesToDeparture } from './startWindow';
 
 const at = (h: number, m: number) => new Date(2026, 10, 11, h, m, 0);
 
@@ -84,4 +85,26 @@ describe('siguiente salida del servicio', () => {
     expect(r?.dep.id).toBe('i2');
   });
   it('sin salidas no hay propuesta', () => { expect(nextDeparture([], 'ida', at(8, 0))).toBeNull(); });
+});
+
+describe('servicio que pasa las 00:00', () => {
+  const night = [
+    { id: 'n1', route_id: 'ida', departure_time: '21:00:00' },
+    { id: 'n2', route_id: 'vuelta', departure_time: '00:45:00', next_day: true }
+  ];
+  it('la vuelta de las 00:45 es la próxima salida de un viaje de las 21:00 (no "mañana")', () => {
+    const r = nextDeparture(night, 'ida', at(23, 30), '2026-11-11');
+    expect(r?.dep.id).toBe('n2');
+    expect(r?.minutes).toBe(75);
+    expect(r?.tomorrow).toBe(false);
+  });
+  it('pasada la medianoche sigue contando desde el día del servicio', () => {
+    const r = nextDeparture(night, 'ida', new Date(2026, 10, 12, 0, 30, 0), '2026-11-11');
+    expect(r?.dep.id).toBe('n2');
+    expect(r?.minutes).toBe(15);
+  });
+  it('minutesToDeparture suma un día a las salidas marcadas', () => {
+    expect(minutesToDeparture('00:45', at(23, 30), '2026-11-11', true)).toBe(75);
+    expect(minutesToDeparture('00:45', at(23, 30), '2026-11-11')).toBe(-1365);
+  });
 });

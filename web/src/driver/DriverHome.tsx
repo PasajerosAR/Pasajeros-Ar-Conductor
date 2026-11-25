@@ -27,9 +27,11 @@ export function DriverHome() {
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 30_000); return () => clearInterval(t); }, []);
 
   const shift = useQuery(async () => must(await supabase.from('shifts').select('*').is('ended_at', null).maybeSingle()) as Shift | null, []);
+  const dayStart = new Date(new Date().setHours(0, 0, 0, 0));
+  const dayEnd = new Date(dayStart.getTime() + 24 * 3600_000);
   const trips = useQuery(async () => must(await supabase.from('trips')
     .select('id,status,scheduled_departure,vehicles(internal_number),services(code),service_departures(routes(name))')
-    .or(`service_date.eq.${todayLocal()},status.eq.in_progress`).order('scheduled_departure')) as unknown as TripRow[], []);
+    .or(`service_date.eq.${todayLocal()},status.eq.in_progress,and(scheduled_departure.gte.${dayStart.toISOString()},scheduled_departure.lt.${dayEnd.toISOString()})`).order('scheduled_departure')) as unknown as TripRow[], []);
 
   const toggleShift = async () => {
     setBusy(true); setError(null);

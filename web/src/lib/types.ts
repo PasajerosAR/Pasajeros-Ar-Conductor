@@ -53,7 +53,7 @@ export interface ServiceStop { service_id: string; route_stop_id: string; minute
 export interface Company { id: string; name: string; active: boolean; created_at: string }
 export interface Service { id: string; code: string; active: boolean }
 export interface ServiceDeparture {
-  id: string; service_id: string; route_id: string; departure_time: string; day_types: DayType[]; active: boolean;
+  id: string; service_id: string; route_id: string; departure_time: string; next_day: boolean; day_types: DayType[]; active: boolean;
 }
 
 export interface Trip {

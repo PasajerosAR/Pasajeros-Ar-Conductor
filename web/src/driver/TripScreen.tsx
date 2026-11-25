@@ -125,15 +125,15 @@ export function TripScreen() {
   // Salidas y recorridos del servicio para preparar el siguiente viaje mientras este sigue en curso.
   const done = t?.status === 'completed';
   const canPrepareNext = done || t?.status === 'in_progress';
-  const nextDeps = useQuery(async () => canPrepareNext && trip.data ? must(await supabase.from('service_departures').select('id,route_id,departure_time,day_types')
-    .eq('service_id', trip.data.service_id).eq('active', true).order('departure_time')) as { id: string; route_id: string; departure_time: string; day_types: DayType[] }[] : [], [canPrepareNext, trip.data?.service_id]);
+  const nextDeps = useQuery(async () => canPrepareNext && trip.data ? must(await supabase.from('service_departures').select('id,route_id,departure_time,next_day,day_types')
+    .eq('service_id', trip.data.service_id).eq('active', true).order('departure_time')) as { id: string; route_id: string; departure_time: string; next_day: boolean; day_types: DayType[] }[] : [], [canPrepareNext, trip.data?.service_id]);
   const routeNames = useQuery(async () => canPrepareNext ? must(await supabase.from('routes').select('id,name')) as { id: string; name: string }[] : [], [canPrepareNext]);
   const nextOptions = t?.day_type
     ? (nextDeps.data ?? []).filter((departure) => departure.day_types.includes(t.day_type as DayType))
     : [];
   const scheduleNow = t ? serviceScheduleReferenceTime(t.service_date, t.scheduled_departure, now) : now;
   const automaticNext = nextOptions.length
-    ? nextDeparture(nextOptions, t?.service_departures?.route_id, scheduleNow)
+    ? nextDeparture(nextOptions, t?.service_departures?.route_id, scheduleNow, t?.service_date)
     : null;
   const nextService = automaticNext;
   const nextRouteName = (routeId: string) => routeNames.data?.find((route) => route.id === routeId)?.name ?? '';
@@ -277,6 +277,7 @@ export function TripScreen() {
     const [year, month, day] = t.service_date.split('-').map(Number);
     const scheduled = new Date(year, month - 1, day, hour, minute);
     if (departure.tomorrow) scheduled.setDate(scheduled.getDate() + 1);
+    if (departure.dep.next_day) scheduled.setDate(scheduled.getDate() + 1);
     return scheduled;
   };
   const forceNextTrip = async () => {

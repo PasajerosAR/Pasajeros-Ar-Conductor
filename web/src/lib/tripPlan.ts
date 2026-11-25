@@ -22,7 +22,7 @@ export function nearestOrigin<T extends { lat: number | null; lng: number | null
   return best;
 }
 
-export interface NextDep { id: string; route_id: string; departure_time: string }
+export interface NextDep { id: string; route_id: string; departure_time: string; next_day?: boolean }
 
 export function serviceScheduleReferenceTime(serviceDate: string, scheduledDeparture: string, now: Date): Date {
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -31,10 +31,10 @@ export function serviceScheduleReferenceTime(serviceDate: string, scheduledDepar
 
 // Siguiente salida del servicio después de terminar un viaje: prefiere el sentido contrario (la vuelta).
 // Toma la más próxima que todavía esté dentro de la ventana de inicio; si no queda ninguna hoy, la primera de mañana.
-export function nextDeparture<T extends NextDep>(deps: T[], currentRouteId: string | undefined, now: Date): { dep: T; minutes: number; tomorrow: boolean } | null {
+export function nextDeparture<T extends NextDep>(deps: T[], currentRouteId: string | undefined, now: Date, serviceDate?: string): { dep: T; minutes: number; tomorrow: boolean } | null {
   const opposite = deps.filter((d) => d.route_id !== currentRouteId);
   const pool = opposite.length ? opposite : deps;
-  const timed = pool.map((dep) => ({ dep, minutes: minutesToDeparture(dep.departure_time, now) }));
+  const timed = pool.map((dep) => ({ dep, minutes: minutesToDeparture(dep.departure_time, now, serviceDate, dep.next_day) }));
   const upcoming = timed.filter((item) => item.minutes >= 0).sort((a, b) => a.minutes - b.minutes)[0];
   if (upcoming) return { ...upcoming, tomorrow: false };
 
