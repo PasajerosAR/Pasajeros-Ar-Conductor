@@ -1662,6 +1662,7 @@ tr.sel-row {
 .route-map-view {
   position: relative;
   min-width: 0;
+  z-index: 1;
 }
   .route-map-view.fullscreen {
     position: fixed;
@@ -2504,3 +2505,9 @@ tr.sel-row {
 .driver-msg.urgent { border-color: #e5484d; }
 .driver-msg.read { opacity: .65; }
 .driver-msg small { color: var(--driver-muted); }
+
+/* Mapa del conductor en modo oscuro: se oscurecen solo las baldosas (los marcadores y la flecha no cambian) */
+.driver-shell[data-theme="dark"] .route-map-canvas .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.7);
+}
+.driver-shell[data-theme="dark"] .route-map-canvas.leaflet-container { background: #1f2630; }
