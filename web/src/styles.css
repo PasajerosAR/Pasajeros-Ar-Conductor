@@ -1796,6 +1796,10 @@ tr.sel-row {
   background: var(--driver-late);
 }
 
+.route-map-view:not(.fullscreen) .leaflet-control-zoom {
+  display: none;
+}
+
 /* turn-banner */
 .turn-banner {
   position: absolute;
