@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Pasajeros.ar Conductor</string>
-    <string name="title_activity_main">Pasajeros.ar Conductor</string>
+    <string name="app_name">Conductor Pasajeros.ar</string>
+    <string name="title_activity_main">Conductor Pasajeros.ar</string>
     <string name="package_name">ar.pasajeros.conductor</string>
     <string name="custom_url_scheme">ar.pasajeros.conductor</string>
 </resources>
