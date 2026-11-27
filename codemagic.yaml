@@ -4,7 +4,7 @@
 #   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
 workflows:
   conductor-apk:
-    name: Pasajeros.ar Conductor
+    name: Conductor Pasajeros.ar
     instance_type: mac_mini_m2
     max_build_duration: 30
     environment:
