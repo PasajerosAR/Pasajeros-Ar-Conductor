@@ -1,53 +1,78 @@
 import { useEffect, useRef, useState } from 'react';
 import { friendly } from '../lib/errors';
 import { formatTime } from '../ui';
-import { ClockError, capturePhoto, currentFix, isNetworkError, newKey, queueAdd, queueRemove, sendPunch, type PunchItem, type PunchKind, type PunchResult } from '../lib/clock';
+import { ClockError, capturePhoto, currentFix, isNetworkError, newKey, queueAdd, queueRemove, sendPunch, type Fix, type PunchItem, type PunchKind, type PunchResult } from '../lib/clock';
 
 const INTRO_KEY = 'pasajerosar-clock-intro';
 const seenIntro = () => { try { return localStorage.getItem(INTRO_KEY) === '1'; } catch { return false; } };
 
-type Step = 'intro' | 'camera' | 'gps' | 'sending' | 'done' | 'queued' | 'error';
+type Step = 'intro' | 'camera' | 'preview' | 'gps' | 'confirm' | 'sending' | 'done' | 'queued' | 'error';
 interface Props { kind: PunchKind; companyId: string; driverId: string; onClose: (changed: boolean) => void }
 
-// Marcar: toca "Iniciar" o "Cerrar" → foto con la cámara frontal → ubicación → envío. Todo en un paso.
+// Marcar: "Iniciar" o "Cerrar" → foto con la cámara frontal → se ve la foto (repetir o usar) → ubicación → confirmar → envío.
+// Hasta confirmar se puede cancelar; una vez registrado el marcaje no se modifica.
 export function ClockFlow({ kind, companyId, driverId, onClose }: Props) {
   const [step, setStep] = useState<Step>(seenIntro() ? 'camera' : 'intro');
   const [error, setError] = useState('');
   const [result, setResult] = useState<PunchResult | null>(null);
+  const [photo, setPhoto] = useState<Blob | null>(null);
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [fix, setFix] = useState<Fix | null>(null);
+  const [confirmAt, setConfirmAt] = useState('');
   const video = useRef<HTMLVideoElement>(null);
   const running = useRef(false);
   const word = kind === 'in' ? 'entrada' : 'salida';
 
-  const run = async () => {
+  useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl); }, [photoUrl]);
+
+  const fail = (e: unknown) => { setError(e instanceof ClockError ? e.message : friendly(e)); setStep('error'); };
+
+  const takePhoto = async () => {
     if (running.current || !video.current) return;
     running.current = true;
     setError('');
-    let item: PunchItem | null = null;
     try {
       setStep('camera');
-      const photo = await capturePhoto(video.current);
-      setStep('gps');
-      const fix = await currentFix();
-      item = { key: newKey(), kind, companyId, driverId, photo, fix };
+      const blob = await capturePhoto(video.current);
+      setPhoto(blob); setPhotoUrl(URL.createObjectURL(blob)); setFix(null);
+      setStep('preview');
+    } catch (e) { fail(e); } finally { running.current = false; }
+  };
+
+  const locate = async () => {
+    if (running.current) return;
+    running.current = true;
+    setError(''); setStep('gps');
+    try {
+      setFix(await currentFix());
+      setConfirmAt(new Date().toISOString());
+      setStep('confirm');
+    } catch (e) { fail(e); } finally { running.current = false; }
+  };
+
+  const send = async () => {
+    if (running.current || !photo || !fix) return;
+    running.current = true;
+    const item: PunchItem = { key: newKey(), kind, companyId, driverId, photo, fix };
+    try {
       await queueAdd(item).catch(() => undefined);     // queda guardado en el teléfono por si se corta la conexión
       setStep('sending');
       const r = await sendPunch(item);
       await queueRemove(item.key).catch(() => undefined);
       setResult(r); setStep('done');
     } catch (e) {
-      if (item && isNetworkError(e)) { setStep('queued'); }
+      if (isNetworkError(e)) setStep('queued');
       else {
-        if (item) await queueRemove(item.key).catch(() => undefined);   // el servidor lo rechazó: no se reintenta solo
-        setError(e instanceof ClockError ? e.message : friendly(e));
-        setStep('error');
+        await queueRemove(item.key).catch(() => undefined);   // el servidor lo rechazó: no se reintenta solo
+        fail(e);
       }
     } finally { running.current = false; }
   };
 
-  useEffect(() => { if (step === 'camera' && !running.current) void run(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [step === 'camera']);
+  useEffect(() => { if (step === 'camera' && !running.current) void takePhoto(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [step === 'camera']);
 
   const accept = () => { try { localStorage.setItem(INTRO_KEY, '1'); } catch { /* sin almacenamiento */ } setStep('camera'); };
-  const retry = () => { setStep('camera'); };
+  const retry = () => { if (photo) void locate(); else setStep('camera'); };   // con foto ya aceptada, solo se repite la ubicación
 
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="clock-title"
@@ -69,6 +94,24 @@ export function ClockFlow({ kind, companyId, driverId, onClose }: Props) {
           </>
         )}
         {step === 'camera' && <p>Sacando la foto… mirá a la pantalla.</p>}
+        {step === 'preview' && (
+          <>
+            <img src={photoUrl} alt="Foto tomada para el marcaje" style={{ width: 240, maxWidth: '100%', borderRadius: 12, transform: 'scaleX(-1)' }} />
+            <p>¿Se te ve bien?</p>
+            <button className="primary big" style={{ width: '100%' }} onClick={() => void locate()}>Usar esta foto</button>
+            <p><button className="driver-text-button" type="button" onClick={() => setStep('camera')}>Repetir foto</button></p>
+            <p><button className="driver-text-button" type="button" onClick={() => onClose(false)}>Cancelar</button></p>
+          </>
+        )}
+        {step === 'confirm' && (
+          <>
+            <img src={photoUrl} alt="Foto del marcaje" style={{ width: 120, borderRadius: 10, transform: 'scaleX(-1)' }} />
+            <p style={{ fontSize: 18 }}>Marcar {word} · {formatTime(confirmAt)}</p>
+            <p style={{ opacity: 0.8 }}>Ubicación obtenida. La hora definitiva la registra el servidor.</p>
+            <button className="primary big" style={{ width: '100%' }} onClick={() => void send()}>Confirmar {word}</button>
+            <p><button className="driver-text-button" type="button" onClick={() => onClose(false)}>Cancelar</button></p>
+          </>
+        )}
         {step === 'gps' && <p>Buscando tu ubicación… puede tardar unos segundos.</p>}
         {step === 'sending' && <p>Enviando el marcaje…</p>}
         {step === 'done' && result && (
