@@ -432,7 +432,7 @@ export function TripScreen() {
 
   if (taquilla && routeId) {
     return <TaquillaPanel tripId={id} layoutId={layoutId ?? null} routeId={routeId} stops={stops.data ?? []} suggestedStopId={suggested}
-      onboard={counts?.onboard ?? null} capacity={counts?.capacity ?? null} onSold={tickets.reload} onBack={() => setTaquilla(false)} />;
+      onboard={counts?.onboard ?? null} capacity={counts?.capacity ?? null} onSold={() => { tickets.reload(); void refreshCounts(); stopCounts.reload(); }} onBack={() => setTaquilla(false)} />;
   }
   if (scanning && inTrip) {
     return <ScanPanel tripId={id} layoutId={layoutId ?? null} stopId={suggested} stopName={stops.data?.find((s) => s.id === suggested)?.name ?? ''} gpsFix={gpsFix}

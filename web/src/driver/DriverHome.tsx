@@ -8,6 +8,8 @@ import { Loading, formatTime, todayLocal } from '../ui';
 import { formatPunctuality, punctualityMinutes } from '../lib/punctuality';
 import { ActiveTrip } from './ActiveTrip';
 import { DriverCompany } from './DriverCompany';
+import { ClockFlow } from './ClockFlow';
+import { flushQueue, queueAll, type PunchKind } from '../lib/clock';
 import { STATUS_LABEL, type Shift, type TripStatus } from '../lib/types';
 
 interface TripRow {
@@ -16,6 +18,8 @@ interface TripRow {
   services: { code: string } | null;
   service_departures: { routes: { name: string } | null } | null;
 }
+
+interface PunchRow { id: string; kind: 'in' | 'out'; server_at: string; zone_name: string | null; inside: boolean; delayed: boolean }
 
 export function DriverHome() {
   const { profile } = useAuth();
@@ -33,7 +37,37 @@ export function DriverHome() {
     .select('id,status,scheduled_departure,vehicles(internal_number),services(code),service_departures(routes(name))')
     .or(`service_date.eq.${todayLocal()},status.eq.in_progress,and(scheduled_departure.gte.${dayStart.toISOString()},scheduled_departure.lt.${dayEnd.toISOString()})`).order('scheduled_departure')) as unknown as TripRow[], []);
 
+  // Marcaje (foto + ubicación): solo si la empresa configuró zonas; si no, la jornada se inicia y cierra como siempre.
+  const zones = useQuery(async () => must(await supabase.from('clock_zones').select('id').eq('active', true).limit(1)) as { id: string }[], []);
+  const clockRequired = (zones.data ?? []).length > 0;
+  const punches = useQuery(async () => must(await supabase.from('shift_punches').select('id,kind,server_at,zone_name,inside,delayed').order('server_at', { ascending: false }).limit(6)) as PunchRow[], []);
+  const [clockKind, setClockKind] = useState<PunchKind | null>(null);
+  const [pending, setPending] = useState(0);
+  const [info, setInfo] = useState<string | null>(null);
+  const driverId = profile?.id ?? '';
+  const refreshPending = async () => setPending((await queueAll().catch(() => [])).filter((i) => i.driverId === driverId).length);
+  const flush = async () => {
+    if (!driverId) return;
+    const out = await flushQueue(driverId);
+    await refreshPending();
+    if (out.length) {
+      const bad = out.find((o) => !o.ok);
+      if (bad && !bad.ok) setError(`No se pudo registrar un marcaje guardado: ${friendly(bad.error)}`);
+      else setInfo('Se envió el marcaje que estaba guardado en el teléfono.');
+      shift.reload(); punches.reload();
+    }
+  };
+  useEffect(() => {
+    void flush();
+    const on = () => void flush();
+    window.addEventListener('online', on);
+    const id = setInterval(() => void flush(), 30_000);
+    return () => { window.removeEventListener('online', on); clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driverId]);
+
   const toggleShift = async () => {
+    if (clockRequired) { setError(null); setInfo(null); setClockKind(shift.data ? 'out' : 'in'); return; }
     setBusy(true); setError(null);
     const { error: e } = await supabase.rpc(shift.data ? 'end_shift' : 'start_shift');
     setBusy(false);
@@ -51,6 +85,12 @@ export function DriverHome() {
       <DriverCompany />
 
       {error && <div className="notice error" role="alert">{error}</div>}
+      {info && <div className="notice ok" role="status">{info}</div>}
+      {pending > 0 && <div className="notice warn" role="status">Hay un marcaje guardado en el teléfono: se envía solo cuando haya conexión.</div>}
+      {clockKind && profile?.company_id && (
+        <ClockFlow kind={clockKind} companyId={profile.company_id} driverId={driverId}
+          onClose={(changed) => { setClockKind(null); void refreshPending(); if (changed) { shift.reload(); punches.reload(); } }} />
+      )}
 
       <header className="driver-greeting">
         <div className="driver-date">{now.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
@@ -70,14 +110,28 @@ export function DriverHome() {
               <span className={`driver-status-badge${shift.data ? ' active' : ''}`}><i />{shift.data ? 'En turno' : 'Inactiva'}</span>
             </div>
             <div className="driver-shift-footer">
-              <span>{shift.data ? 'Acordate de cerrar la jornada al terminar.' : 'Iniciá tu jornada para empezar.'}</span>
-              <button className={shift.data ? 'secondary' : 'primary'} disabled={busy} onClick={toggleShift}>
+              <span>{shift.data ? 'Acordate de cerrar la jornada al terminar.' : 'Iniciá tu jornada para empezar.'}{clockRequired ? ' Se marca con foto y ubicación.' : ''}</span>
+              <button className={shift.data ? 'secondary' : 'primary'} disabled={busy || pending > 0 || zones.loading} onClick={toggleShift}>
                 {busy ? 'Procesando…' : shift.data ? 'Cerrar' : 'Iniciar'}
               </button>
             </div>
           </>
         )}
       </div>
+
+      {clockRequired && (punches.data ?? []).length > 0 && (
+        <section className="driver-upcoming" aria-label="Marcajes recientes">
+          <div className="driver-section-heading"><h2>Marcajes recientes</h2></div>
+          <div className="panel" style={{ display: 'grid', gap: 6 }}>
+            {(punches.data ?? []).map((p) => (
+              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span>{p.kind === 'in' ? 'Entrada' : 'Salida'} · {new Date(p.server_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })} {formatTime(p.server_at)}</span>
+                <small>{p.zone_name ?? ''}{!p.inside ? ' · fuera de zona' : ''}{p.delayed ? ' · con demora' : ''}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <ActiveTrip onChange={() => { trips.reload(); shift.reload(); }} />
 
