@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { must, useQuery } from '../lib/useQuery';
 import { friendly } from '../lib/errors';
+import { useAuth } from '../auth/AuthProvider';
 import type { RouteStop } from '../lib/types';
 import {
   columnTemplate, formatMoney, priceFor, seatClassName, seatOccupied, seatsLeft, seatState, summarize,
@@ -22,8 +23,8 @@ interface Props {
 }
 
 type Method = 'cash' | 'transfer' | 'mp';
-const METHODS: { key: Method; label: string }[] = [
-  { key: 'cash', label: 'Efectivo' }, { key: 'transfer', label: 'Transferencia' }, { key: 'mp', label: 'QR Mercado Pago' }
+const METHODS: { key: Method; label: string; feature: string }[] = [
+  { key: 'cash', label: 'Efectivo', feature: 'pay_cash' }, { key: 'transfer', label: 'Transferencia', feature: 'pay_transfer' }, { key: 'mp', label: 'QR Mercado Pago', feature: 'pay_qr' }
 ];
 const REFRESH_MS = 8000;   // los asientos se vuelven a consultar cada tanto: ventas de ventanilla, web u otro conductor
 
@@ -55,7 +56,9 @@ export function TaquillaPanel({ tripId, layoutId, routeId, stops, suggestedStopI
   const [floor, setFloor] = useState(1);
   const [picked, setPicked] = useState<string[]>([]);       // ids de celdas elegidas
   const [qrLeft, setQrLeft] = useState<number | null>(null);   // null = todavía no se generó
-  const [method, setMethod] = useState<Method>('cash');
+  const { blockedFeatures } = useAuth();   // formas de cobro que el administrador general bloqueó a la empresa
+  const isBlocked = (key: Method) => blockedFeatures.includes(METHODS.find((m) => m.key === key)!.feature);
+  const [method, setMethod] = useState<Method>(() => METHODS.find((m) => !blockedFeatures.includes(m.feature))?.key ?? 'cash');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [received, setReceived] = useState<{ total: number; seats: string[]; method: Method } | null>(null);
@@ -306,8 +309,9 @@ export function TaquillaPanel({ tripId, layoutId, routeId, stops, suggestedStopI
         {actionError && <div className="notice error" role="alert">{actionError}</div>}
         <div className="taquilla-methods" role="radiogroup" aria-label="Forma de pago">
           {METHODS.map((m) => (
-            <button key={m.key} type="button" role="radio" aria-checked={method === m.key}
-              className={method === m.key ? 'is-active' : ''} onClick={() => setMethod(m.key)}>{m.label}</button>
+            <button key={m.key} type="button" role="radio" aria-checked={method === m.key} aria-disabled={isBlocked(m.key)}
+              className={method === m.key ? 'is-active' : ''} style={isBlocked(m.key) ? { opacity: 0.45 } : undefined}
+              onClick={() => { if (isBlocked(m.key)) setActionError(`${m.label}: función bloqueada para tu empresa.`); else { setActionError(null); setMethod(m.key); } }}>{m.label}</button>
           ))}
         </div>
         {method === 'mp'

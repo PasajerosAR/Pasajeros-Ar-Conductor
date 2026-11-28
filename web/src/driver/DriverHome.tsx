@@ -22,7 +22,7 @@ interface TripRow {
 interface PunchRow { id: string; kind: 'in' | 'out'; server_at: string; zone_name: string | null; inside: boolean; delayed: boolean }
 
 export function DriverHome() {
-  const { profile } = useAuth();
+  const { profile, blockedFeatures } = useAuth();
   const [now, setNow] = useState(() => new Date());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,7 +39,7 @@ export function DriverHome() {
 
   // Marcaje (foto + ubicación): solo si la empresa configuró zonas; si no, la jornada se inicia y cierra como siempre.
   const zones = useQuery(async () => must(await supabase.from('clock_zones').select('id').eq('active', true).limit(1)) as { id: string }[], []);
-  const clockRequired = (zones.data ?? []).length > 0;
+  const clockRequired = (zones.data ?? []).length > 0 && !blockedFeatures.includes('clock');   // el administrador general puede apagar el marcaje
   const punches = useQuery(async () => must(await supabase.from('shift_punches').select('id,kind,server_at,zone_name,inside,delayed').order('server_at', { ascending: false }).limit(6)) as PunchRow[], []);
   const [clockKind, setClockKind] = useState<PunchKind | null>(null);
   const [pending, setPending] = useState(0);
