@@ -54,7 +54,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const bad = 'Empresa, usuario o contraseña incorrectos.';
     const { data, error } = await supabase.functions.invoke('login-username', { body: { company, username: identifier, password } });
     const tokens = data as { access_token?: string; refresh_token?: string } | null;
-    if (error || !tokens?.access_token || !tokens.refresh_token) return bad;
+    if (error) {
+      const status = (error as { context?: { status?: number } }).context?.status;
+      return status === 401 ? bad : 'No se pudo conectar con el servidor para ingresar con usuario. Probá de nuevo o ingresá con el correo.';
+    }
+    if (!tokens?.access_token || !tokens.refresh_token) return bad;
     const { error: e2 } = await supabase.auth.setSession({ access_token: tokens.access_token, refresh_token: tokens.refresh_token });
     return e2 ? bad : null;
   };
