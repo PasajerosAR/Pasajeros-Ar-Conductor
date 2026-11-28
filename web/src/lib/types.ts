@@ -14,6 +14,7 @@ export interface Profile {
   dni: string | null;
   phone: string | null;
   legajo?: string | null;
+  username?: string | null;
   active: boolean;
 }
 

@@ -8,7 +8,7 @@ interface AuthState {
   session: Session | null;
   profile: Profile | null;
   blockedFeatures: string[];   // funciones que el administrador general le bloqueó a la empresa del usuario
-  signIn: (email: string, password: string) => Promise<string | null>;
+  signIn: (identifier: string, password: string, company?: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 }
 
@@ -45,9 +45,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { alive = false; };
   }, [profile?.company_id]);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return error ? 'Correo o contraseña incorrectos.' : null;
+  // Con "@" ingresa con el correo; si no, con empresa (código) + usuario, que se resuelve en el servidor.
+  const signIn = async (identifier: string, password: string, company = '') => {
+    if (identifier.includes('@')) {
+      const { error } = await supabase.auth.signInWithPassword({ email: identifier, password });
+      return error ? 'Correo o contraseña incorrectos.' : null;
+    }
+    const bad = 'Empresa, usuario o contraseña incorrectos.';
+    const { data, error } = await supabase.functions.invoke('login-username', { body: { company, username: identifier, password } });
+    const tokens = data as { access_token?: string; refresh_token?: string } | null;
+    if (error || !tokens?.access_token || !tokens.refresh_token) return bad;
+    const { error: e2 } = await supabase.auth.setSession({ access_token: tokens.access_token, refresh_token: tokens.refresh_token });
+    return e2 ? bad : null;
   };
   const signOut = async () => { await supabase.auth.signOut(); };
 
